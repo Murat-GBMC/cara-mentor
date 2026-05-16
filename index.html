@@ -4,445 +4,416 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>CARA — Your AI Execution Mentor</title>
-<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 <style>
   :root {
-    --navy: #0f1f38;
-    --navy-mid: #162d4f;
-    --navy-light: #1e3d6b;
-    --gold: #c9a84c;
-    --gold-light: #e2c47a;
-    --cream: #f8f4ee;
-    --cream-dark: #ede8df;
-    --text-dark: #0f1f38;
+    --teal: #6fc8cc;
+    --teal-dark: #4aabb0;
+    --teal-light: rgba(111,200,204,0.12);
+    --teal-lighter: rgba(111,200,204,0.06);
+    --text-dark: #1a2332;
     --text-mid: #4a5568;
-    --text-light: #8a96a8;
+    --text-light: #94a3b8;
+    --border: #e8edf2;
+    --bg-soft: #f7f9fb;
   }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family:'Plus Jakarta Sans',sans-serif; background:transparent; display:flex; flex-direction:column; align-items:center; }
 
-  * { margin: 0; padding: 0; box-sizing: border-box; }
-
-  body {
-    font-family: 'DM Sans', sans-serif;
-    background: var(--cream);
-    min-height: 100vh;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    padding: 20px;
+  /* ── Language Gate ── */
+  .lang-gate {
+    width:100%;
+    background:#fff;
+    border:1px solid var(--border);
+    border-radius:16px;
+    box-shadow:0 4px 24px rgba(0,0,0,0.06);
+    padding:36px 28px 32px;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    gap:24px;
+    animation:fadeUp 0.4s ease both;
   }
-
-  body::before {
-    content: '';
-    position: fixed;
-    inset: 0;
-    background:
-      radial-gradient(ellipse at 20% 10%, rgba(201,168,76,0.08) 0%, transparent 50%),
-      radial-gradient(ellipse at 80% 90%, rgba(15,31,56,0.06) 0%, transparent 50%);
-    pointer-events: none;
-    z-index: 0;
+  .lang-gate-avatar {
+    width:56px; height:56px;
+    border-radius:14px;
+    background:var(--teal-light);
+    border:2px solid var(--teal);
+    display:flex; align-items:center; justify-content:center;
+    font-size:24px; font-weight:700;
+    color:var(--teal-dark);
   }
+  .lang-gate h2 {
+    font-size:20px; font-weight:700;
+    color:var(--text-dark);
+    letter-spacing:-0.3px;
+    text-align:center;
+  }
+  .lang-gate p {
+    font-size:13.5px;
+    color:var(--text-mid);
+    text-align:center;
+    line-height:1.6;
+    max-width:340px;
+  }
+  .lang-grid {
+    display:grid;
+    grid-template-columns:1fr 1fr 1fr;
+    gap:10px;
+    width:100%;
+    max-width:400px;
+  }
+  .lang-btn {
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    gap:6px;
+    padding:14px 10px;
+    background:var(--bg-soft);
+    border:1.5px solid var(--border);
+    border-radius:12px;
+    cursor:pointer;
+    transition:all 0.18s ease;
+    font-family:'Plus Jakarta Sans',sans-serif;
+  }
+  .lang-btn:hover {
+    border-color:var(--teal);
+    background:var(--teal-light);
+    transform:translateY(-2px);
+    box-shadow:0 4px 12px rgba(111,200,204,0.25);
+  }
+  .lang-btn .flag { font-size:26px; line-height:1; }
+  .lang-btn .lang-name { font-size:12px; font-weight:600; color:var(--text-dark); }
+  .lang-btn .lang-native { font-size:11px; color:var(--text-light); font-weight:400; }
 
+  /* ── Main Chat ── */
   .wrapper {
-    width: 100%;
-    max-width: 780px;
-    position: relative;
-    z-index: 1;
-    animation: fadeUp 0.6s ease both;
+    width:100%;
+    background:#fff;
+    border:1px solid var(--border);
+    border-radius:16px;
+    overflow:hidden;
+    box-shadow:0 4px 24px rgba(0,0,0,0.06);
+    display:none;
+    animation:fadeUp 0.4s ease both;
   }
+  @keyframes fadeUp { from{opacity:0;transform:translateY(12px)} to{opacity:1;transform:translateY(0)} }
 
-  @keyframes fadeUp {
-    from { opacity: 0; transform: translateY(24px); }
-    to   { opacity: 1; transform: translateY(0); }
-  }
+  .header { background:#fff;border-bottom:2px solid var(--teal);padding:18px 24px;display:flex;align-items:center;gap:14px; }
+  .avatar { width:44px;height:44px;border-radius:12px;background:var(--teal-light);border:2px solid var(--teal);display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:700;color:var(--teal-dark);flex-shrink:0; }
+  .header-text h1 { font-size:17px;font-weight:700;color:var(--text-dark);letter-spacing:-0.3px; }
+  .header-text p { font-size:12px;color:var(--text-light);font-weight:400;margin-top:2px; }
+  .status-dot { width:7px;height:7px;background:var(--teal);border-radius:50%;display:inline-block;margin-right:5px;animation:pulse 2.5s ease infinite; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+  .header-right { margin-left:auto; display:flex; align-items:center; gap:10px; }
+  .badge { background:var(--teal-light);color:var(--teal-dark);font-size:11px;font-weight:600;padding:4px 12px;border-radius:20px;letter-spacing:0.3px;border:1px solid rgba(111,200,204,0.3); }
+  .lang-indicator { font-size:18px; cursor:pointer; title:"Change language"; opacity:0.7; transition:opacity 0.2s; }
+  .lang-indicator:hover { opacity:1; }
 
-  .header {
-    background: var(--navy);
-    border-radius: 20px 20px 0 0;
-    padding: 28px 32px 24px;
-    display: flex;
-    align-items: center;
-    gap: 18px;
-    position: relative;
-    overflow: hidden;
-  }
+  .chat-area { background:var(--bg-soft);min-height:400px;max-height:460px;overflow-y:auto;padding:24px 20px;display:flex;flex-direction:column;gap:16px;scroll-behavior:smooth; }
+  .chat-area::-webkit-scrollbar{width:3px} .chat-area::-webkit-scrollbar-thumb{background:var(--border);border-radius:4px}
 
-  .header::after {
-    content: '';
-    position: absolute;
-    top: -40px; right: -40px;
-    width: 160px; height: 160px;
-    background: radial-gradient(circle, rgba(201,168,76,0.15) 0%, transparent 70%);
-    pointer-events: none;
-  }
+  .msg { display:flex;gap:10px;animation:msgIn 0.25s ease both; }
+  @keyframes msgIn { from{opacity:0;transform:translateY(6px)} to{opacity:1;transform:translateY(0)} }
+  .msg.user { flex-direction:row-reverse; }
+  .msg-avatar { width:30px;height:30px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;flex-shrink:0;margin-top:2px; }
+  .msg.cara .msg-avatar { background:var(--teal-light);color:var(--teal-dark);border:1.5px solid rgba(111,200,204,0.3); }
+  .msg.user .msg-avatar { background:var(--teal);color:#fff; }
+  .bubble { max-width:75%;padding:12px 16px;border-radius:14px;font-size:14px;line-height:1.65; }
+  .msg.cara .bubble { background:#fff;color:var(--text-dark);border-radius:4px 14px 14px 14px;border:1px solid var(--border);box-shadow:0 1px 4px rgba(0,0,0,0.04); }
+  .msg.user .bubble { background:var(--teal);color:#fff;border-radius:14px 4px 14px 14px; }
+  .msg-time { font-size:10.5px;color:var(--text-light);margin-top:4px;padding:0 2px; }
+  .msg.user .msg-time { text-align:right; }
+  .msg-content { display:flex;flex-direction:column; }
+  .msg.user .msg-content { align-items:flex-end; }
 
-  .avatar {
-    width: 52px; height: 52px;
-    border-radius: 50%;
-    background: linear-gradient(135deg, var(--gold) 0%, var(--gold-light) 100%);
-    display: flex; align-items: center; justify-content: center;
-    font-family: 'Playfair Display', serif;
-    font-size: 22px; font-weight: 600;
-    color: var(--navy);
-    flex-shrink: 0;
-    box-shadow: 0 0 0 3px rgba(201,168,76,0.3);
-  }
+  .typing-indicator { display:flex;gap:10px;align-items:flex-start;animation:msgIn 0.25s ease both; }
+  .typing-avatar { width:30px;height:30px;border-radius:8px;background:var(--teal-light);border:1.5px solid rgba(111,200,204,0.3);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:var(--teal-dark);flex-shrink:0; }
+  .typing-bubble { background:#fff;border:1px solid var(--border);border-radius:4px 14px 14px 14px;padding:14px 18px;display:flex;gap:5px;align-items:center;box-shadow:0 1px 4px rgba(0,0,0,0.04); }
+  .typing-dot { width:6px;height:6px;background:var(--teal);border-radius:50%;animation:bounce 1.2s ease infinite; }
+  .typing-dot:nth-child(2){animation-delay:0.2s} .typing-dot:nth-child(3){animation-delay:0.4s}
+  @keyframes bounce { 0%,60%,100%{transform:translateY(0);opacity:0.4} 30%{transform:translateY(-5px);opacity:1} }
 
-  .header-text h1 {
-    font-family: 'Playfair Display', serif;
-    font-size: 22px;
-    font-weight: 600;
-    color: #ffffff;
-    letter-spacing: -0.3px;
-  }
+  .suggestions { padding:12px 20px 14px;background:#fff;border-top:1px solid var(--border);display:flex;flex-wrap:wrap;gap:7px;align-items:center; }
+  .suggestion-label { width:100%;font-size:10.5px;color:var(--text-light);font-weight:600;letter-spacing:0.6px;text-transform:uppercase;margin-bottom:2px; }
+  .suggestion-btn { background:var(--teal-lighter);border:1px solid rgba(111,200,204,0.25);color:var(--teal-dark);font-family:'Plus Jakarta Sans',sans-serif;font-size:12px;font-weight:500;padding:6px 13px;border-radius:20px;cursor:pointer;transition:all 0.18s ease; }
+  .suggestion-btn:hover { background:var(--teal);border-color:var(--teal);color:#fff;transform:translateY(-1px);box-shadow:0 3px 10px rgba(111,200,204,0.35); }
 
-  .header-text p {
-    font-size: 13px;
-    color: rgba(255,255,255,0.55);
-    font-weight: 300;
-    margin-top: 3px;
-    letter-spacing: 0.3px;
-  }
+  .input-area { background:#fff;border-top:1px solid var(--border);padding:14px 16px;display:flex;gap:10px;align-items:flex-end; }
+  .input-wrap { flex:1;background:var(--bg-soft);border:1.5px solid var(--border);border-radius:12px;display:flex;align-items:flex-end;padding:4px 4px 4px 14px;transition:border-color 0.2s,box-shadow 0.2s; }
+  .input-wrap:focus-within { border-color:var(--teal);box-shadow:0 0 0 3px rgba(111,200,204,0.15);background:#fff; }
+  textarea { flex:1;background:transparent;border:none;outline:none;font-family:'Plus Jakarta Sans',sans-serif;font-size:13.5px;color:var(--text-dark);line-height:1.5;resize:none;min-height:22px;max-height:110px;padding:7px 0;overflow-y:auto; }
+  textarea::placeholder { color:var(--text-light); }
+  .send-btn { width:38px;height:38px;background:var(--teal);border:none;border-radius:10px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all 0.18s ease;flex-shrink:0; }
+  .send-btn:hover { background:var(--teal-dark);transform:scale(1.06);box-shadow:0 4px 12px rgba(111,200,204,0.4); }
+  .send-btn:active { transform:scale(0.96); }
+  .send-btn:disabled { background:var(--border);cursor:not-allowed;transform:none;box-shadow:none; }
+  .send-btn svg { width:16px;height:16px;fill:none;stroke:white;stroke-width:2.2; }
 
-  .status-dot {
-    width: 8px; height: 8px;
-    background: #4ade80;
-    border-radius: 50%;
-    display: inline-block;
-    margin-right: 6px;
-    box-shadow: 0 0 6px rgba(74,222,128,0.6);
-    animation: pulse 2s ease infinite;
-  }
+  .footer-note { text-align:center;font-size:11px;color:var(--text-light);padding:10px 20px;background:#fff;border-top:1px solid var(--border); }
+  .footer-note span { color:var(--teal-dark);font-weight:600; }
+  .bubble strong { color:var(--teal-dark);font-weight:600; }
+  .msg.user .bubble strong { color:#fff; }
+  .bubble ol,.bubble ul { padding-left:18px;margin:5px 0; }
+  .bubble li { margin-bottom:3px; }
+  .bubble p { margin-bottom:6px; }
+  .bubble p:last-child { margin-bottom:0; }
 
-  @keyframes pulse {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0.5; }
-  }
+  /* RTL support for Arabic */
+  .rtl { direction:rtl; text-align:right; }
 
-  .badge {
-    margin-left: auto;
-    background: rgba(201,168,76,0.15);
-    border: 1px solid rgba(201,168,76,0.3);
-    color: var(--gold-light);
-    font-size: 11px;
-    font-weight: 500;
-    padding: 4px 12px;
-    border-radius: 20px;
-    letter-spacing: 0.5px;
-    flex-shrink: 0;
-  }
-
-  .chat-area {
-    background: #ffffff;
-    min-height: 460px;
-    max-height: 520px;
-    overflow-y: auto;
-    padding: 28px 24px;
-    display: flex;
-    flex-direction: column;
-    gap: 20px;
-    scroll-behavior: smooth;
-  }
-
-  .chat-area::-webkit-scrollbar { width: 4px; }
-  .chat-area::-webkit-scrollbar-thumb { background: var(--cream-dark); border-radius: 4px; }
-
-  .msg { display: flex; gap: 12px; animation: msgIn 0.3s ease both; }
-
-  @keyframes msgIn {
-    from { opacity: 0; transform: translateY(8px); }
-    to   { opacity: 1; transform: translateY(0); }
-  }
-
-  .msg.user { flex-direction: row-reverse; }
-
-  .msg-avatar {
-    width: 34px; height: 34px;
-    border-radius: 50%;
-    display: flex; align-items: center; justify-content: center;
-    font-size: 13px; font-weight: 600;
-    flex-shrink: 0;
-    margin-top: 2px;
-  }
-
-  .msg.cara .msg-avatar {
-    background: linear-gradient(135deg, var(--gold) 0%, var(--gold-light) 100%);
-    color: var(--navy);
-    font-family: 'Playfair Display', serif;
-  }
-
-  .msg.user .msg-avatar {
-    background: var(--navy-light);
-    color: rgba(255,255,255,0.85);
-    font-size: 11px;
-  }
-
-  .bubble {
-    max-width: 72%;
-    padding: 14px 18px;
-    border-radius: 18px;
-    font-size: 14.5px;
-    line-height: 1.65;
-  }
-
-  .msg.cara .bubble {
-    background: var(--cream);
-    color: var(--text-dark);
-    border-radius: 4px 18px 18px 18px;
-    border: 1px solid var(--cream-dark);
-  }
-
-  .msg.user .bubble {
-    background: var(--navy);
-    color: rgba(255,255,255,0.92);
-    border-radius: 18px 4px 18px 18px;
-  }
-
-  .msg-time {
-    font-size: 11px;
-    color: var(--text-light);
-    margin-top: 5px;
-    padding: 0 4px;
-  }
-
-  .msg.user .msg-time { text-align: right; }
-  .msg-content { display: flex; flex-direction: column; }
-  .msg.user .msg-content { align-items: flex-end; }
-
-  .typing-indicator { display: flex; gap: 12px; align-items: flex-start; animation: msgIn 0.3s ease both; }
-
-  .typing-avatar {
-    width: 34px; height: 34px;
-    border-radius: 50%;
-    background: linear-gradient(135deg, var(--gold) 0%, var(--gold-light) 100%);
-    display: flex; align-items: center; justify-content: center;
-    font-family: 'Playfair Display', serif;
-    font-size: 13px; font-weight: 600;
-    color: var(--navy);
-    flex-shrink: 0;
-  }
-
-  .typing-bubble {
-    background: var(--cream);
-    border: 1px solid var(--cream-dark);
-    border-radius: 4px 18px 18px 18px;
-    padding: 16px 20px;
-    display: flex;
-    gap: 5px;
-    align-items: center;
-  }
-
-  .typing-dot {
-    width: 7px; height: 7px;
-    background: var(--gold);
-    border-radius: 50%;
-    animation: bounce 1.2s ease infinite;
-  }
-  .typing-dot:nth-child(2) { animation-delay: 0.2s; }
-  .typing-dot:nth-child(3) { animation-delay: 0.4s; }
-
-  @keyframes bounce {
-    0%, 60%, 100% { transform: translateY(0); opacity: 0.4; }
-    30% { transform: translateY(-6px); opacity: 1; }
-  }
-
-  .suggestions {
-    padding: 0 24px 16px;
-    background: #ffffff;
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
-  }
-
-  .suggestion-label {
-    width: 100%;
-    font-size: 11px;
-    color: var(--text-light);
-    font-weight: 500;
-    letter-spacing: 0.5px;
-    text-transform: uppercase;
-    margin-bottom: 2px;
-  }
-
-  .suggestion-btn {
-    background: transparent;
-    border: 1px solid var(--cream-dark);
-    color: var(--text-mid);
-    font-family: 'DM Sans', sans-serif;
-    font-size: 12.5px;
-    padding: 7px 14px;
-    border-radius: 20px;
-    cursor: pointer;
-    transition: all 0.2s ease;
-  }
-
-  .suggestion-btn:hover {
-    background: var(--navy);
-    border-color: var(--navy);
-    color: #ffffff;
-    transform: translateY(-1px);
-  }
-
-  .input-area {
-    background: #ffffff;
-    border-top: 1px solid var(--cream-dark);
-    border-radius: 0 0 20px 20px;
-    padding: 16px 20px;
-    display: flex;
-    gap: 12px;
-    align-items: flex-end;
-  }
-
-  .input-wrap {
-    flex: 1;
-    background: var(--cream);
-    border: 1.5px solid var(--cream-dark);
-    border-radius: 14px;
-    display: flex;
-    align-items: flex-end;
-    padding: 4px 4px 4px 16px;
-    transition: border-color 0.2s;
-  }
-
-  .input-wrap:focus-within {
-    border-color: var(--gold);
-    box-shadow: 0 0 0 3px rgba(201,168,76,0.1);
-  }
-
-  textarea {
-    flex: 1;
-    background: transparent;
-    border: none;
-    outline: none;
-    font-family: 'DM Sans', sans-serif;
-    font-size: 14px;
-    color: var(--text-dark);
-    line-height: 1.5;
-    resize: none;
-    min-height: 24px;
-    max-height: 120px;
-    padding: 8px 0;
-    overflow-y: auto;
-  }
-
-  textarea::placeholder { color: var(--text-light); }
-
-  .send-btn {
-    width: 42px; height: 42px;
-    background: var(--navy);
-    border: none;
-    border-radius: 12px;
-    cursor: pointer;
-    display: flex; align-items: center; justify-content: center;
-    transition: all 0.2s ease;
-    flex-shrink: 0;
-  }
-
-  .send-btn:hover { background: var(--navy-light); transform: scale(1.05); }
-  .send-btn:active { transform: scale(0.97); }
-  .send-btn:disabled { background: var(--cream-dark); cursor: not-allowed; transform: none; }
-  .send-btn svg { width: 18px; height: 18px; fill: none; stroke: white; stroke-width: 2; }
-
-  .footer-note {
-    text-align: center;
-    font-size: 11.5px;
-    color: var(--text-light);
-    margin-top: 12px;
-  }
-
-  .footer-note span { color: var(--gold); font-weight: 500; }
-
-  .bubble strong { color: var(--navy); font-weight: 600; }
-  .bubble ol, .bubble ul { padding-left: 20px; margin: 6px 0; }
-  .bubble li { margin-bottom: 4px; }
-
-  @media (max-width: 600px) {
-    .header { padding: 20px; }
-    .badge { display: none; }
-    .bubble { max-width: 88%; font-size: 14px; }
-    .chat-area { padding: 20px 16px; }
-    .input-area { padding: 12px 16px; }
+  @media(max-width:600px){
+    .badge{display:none}
+    .bubble{max-width:88%;font-size:13.5px}
+    .chat-area{padding:16px 14px}
+    .input-area{padding:10px 12px}
+    .lang-grid{grid-template-columns:1fr 1fr}
   }
 </style>
 </head>
 <body>
 
-<div class="wrapper">
+<!-- Language Selection Screen -->
+<div class="lang-gate" id="langGate">
+  <div class="lang-gate-avatar">C</div>
+  <h2>Welcome to CARA</h2>
+  <p>Your AI Mentor for Execution Capability — developed by GBMC.<br>Please select your language to begin.</p>
+  <div class="lang-grid">
+    <button class="lang-btn" onclick="selectLanguage('en','🇬🇧','English')">
+      <span class="flag">🇬🇧</span>
+      <span class="lang-name">English</span>
+      <span class="lang-native">English</span>
+    </button>
+    <button class="lang-btn" onclick="selectLanguage('tr','🇹🇷','Turkish')">
+      <span class="flag">🇹🇷</span>
+      <span class="lang-name">Turkish</span>
+      <span class="lang-native">Türkçe</span>
+    </button>
+    <button class="lang-btn" onclick="selectLanguage('fr','🇫🇷','French')">
+      <span class="flag">🇫🇷</span>
+      <span class="lang-name">French</span>
+      <span class="lang-native">Français</span>
+    </button>
+    <button class="lang-btn" onclick="selectLanguage('it','🇮🇹','Italian')">
+      <span class="flag">🇮🇹</span>
+      <span class="lang-name">Italian</span>
+      <span class="lang-native">Italiano</span>
+    </button>
+    <button class="lang-btn" onclick="selectLanguage('zh','🇨🇳','Chinese')">
+      <span class="flag">🇨🇳</span>
+      <span class="lang-name">Chinese</span>
+      <span class="lang-native">中文</span>
+    </button>
+    <button class="lang-btn" onclick="selectLanguage('ar','🇸🇦','Arabic')">
+      <span class="flag">🇸🇦</span>
+      <span class="lang-name">Arabic</span>
+      <span class="lang-native">العربية</span>
+    </button>
+  </div>
+</div>
+
+<!-- Main Chat Interface -->
+<div class="wrapper" id="chatWrapper">
   <div class="header">
     <div class="avatar">C</div>
     <div class="header-text">
       <h1>CARA</h1>
       <p><span class="status-dot"></span>Capacity Advisor &amp; Resource for Action</p>
     </div>
-    <div class="badge">Executing Capacity CoE</div>
-  </div>
-
-  <div class="chat-area" id="chatArea">
-    <div class="msg cara">
-      <div class="msg-avatar">C</div>
-      <div class="msg-content">
-        <div class="bubble">
-          Welcome. I'm <strong>CARA</strong> — your AI Mentor for execution capability.<br><br>
-          I'm here to help you navigate real challenges in project management, team leadership, governance, and organizational execution — grounded in the <strong>GBMC framework</strong>.<br><br>
-          To give you the most useful guidance, it helps to know your role. Are you a team member, project leader, PMO professional, or in a management or executive role?
-        </div>
-        <div class="msg-time">Just now</div>
-      </div>
+    <div class="header-right">
+      <div class="badge">Executing Capacity CoE</div>
+      <div class="lang-indicator" id="langFlag" onclick="resetLanguage()" title="Change language"></div>
     </div>
   </div>
 
+  <div class="chat-area" id="chatArea"></div>
+
   <div class="suggestions" id="suggestions">
-    <div class="suggestion-label">Try asking</div>
-    <button class="suggestion-btn" onclick="sendSuggestion(this)">My project is behind schedule</button>
-    <button class="suggestion-btn" onclick="sendSuggestion(this)">How do I handle a difficult sponsor?</button>
-    <button class="suggestion-btn" onclick="sendSuggestion(this)">What is the GBMC Execution Model?</button>
-    <button class="suggestion-btn" onclick="sendSuggestion(this)">Our meetings are unproductive</button>
+    <div class="suggestion-label" id="suggestLabel">Try asking</div>
+    <button class="suggestion-btn" id="sug1" onclick="sendSuggestion(this)"></button>
+    <button class="suggestion-btn" id="sug2" onclick="sendSuggestion(this)"></button>
+    <button class="suggestion-btn" id="sug3" onclick="sendSuggestion(this)"></button>
+    <button class="suggestion-btn" id="sug4" onclick="sendSuggestion(this)"></button>
   </div>
 
   <div class="input-area">
     <div class="input-wrap">
-      <textarea
-        id="userInput"
-        placeholder="Ask CARA anything about execution, projects, leadership..."
-        rows="1"
-        onkeydown="handleKey(event)"
-        oninput="autoResize(this)"
-      ></textarea>
+      <textarea id="userInput" rows="1" onkeydown="handleKey(event)" oninput="autoResize(this)"></textarea>
     </div>
     <button class="send-btn" id="sendBtn" onclick="sendMessage()" title="Send">
       <svg viewBox="0 0 24 24"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
     </button>
   </div>
-</div>
 
-<div class="footer-note">
-  CARA is powered by <span>GBMC Executing Capacity CoE</span> · AI responses may vary · For complex situations, book a live mentoring session
+  <div class="footer-note" id="footerNote">
+    Powered by <span>GBMC Executing Capacity CoE</span> &nbsp;·&nbsp; <span id="footerExtra">For complex situations, book a live mentoring session</span>
+  </div>
 </div>
 
 <script>
+  // ── Language definitions ──
+  const LANGS = {
+    en: {
+      flag: '🇬🇧',
+      placeholder: 'Ask CARA anything about projects, leadership, execution...',
+      suggestLabel: 'Try asking',
+      suggestions: ['My project is behind schedule', 'How do I handle a difficult sponsor?', 'What is the GBMC Execution Model?', 'Our meetings are unproductive'],
+      footer: 'For complex situations, book a live mentoring session',
+      systemPrompt: 'The user has selected English as their language. You MUST respond exclusively in English for this entire conversation, regardless of what language the user writes in.',
+      greeting: 'Hi, I\'m **CARA** — your AI Mentor for execution capability, developed by GBMC.\n\nI can help you with real challenges in project management, team leadership, governance, and organizational execution — all grounded in the **GBMC framework**.\n\nWhat are you working on today? And to give you the most relevant guidance — are you a team member, project leader, PMO professional, or in a management or executive role?'
+    },
+    tr: {
+      flag: '🇹🇷',
+      placeholder: 'CARA\'ya proje, liderlik ve icra hakkında istediğinizi sorun...',
+      suggestLabel: 'Şunu sorabilirsiniz',
+      suggestions: ['Projem geride kaldı, ne yapmalıyım?', 'Zor bir sponsorla nasıl başa çıkabilirim?', 'GBMC İcra Yetkinlik Modeli nedir?', 'Toplantılarımız verimsiz geçiyor'],
+      footer: 'Karmaşık durumlar için canlı mentorluk seansı rezervasyonu yapın',
+      systemPrompt: 'Kullanıcı Türkçe dilini seçti. Bu konuşma boyunca YALNIZCA Türkçe yanıt vermelisiniz.',
+      greeting: 'Merhaba, ben **CARA** — GBMC tarafından geliştirilen, icra yetkinliği alanında yapay zeka destekli mentorunuzum.\n\nProje yönetimi, takım liderliği, kurumsal yönetişim ve organizasyonel icra konularındaki gerçek zorluklarınızda size destek olabilirim — tümü **GBMC çerçevesi** temelinde.\n\nBugün ne üzerinde çalışıyorsunuz? En doğru rehberliği sunabilmem için — bir takım üyesi mi, proje lideri mi, PMO profesyoneli mi, yoksa yönetici düzeyinde mi çalışıyorsunuz?'
+    },
+    fr: {
+      flag: '🇫🇷',
+      placeholder: 'Posez à CARA toute question sur les projets, le leadership...',
+      suggestLabel: 'Essayez de demander',
+      suggestions: ['Mon projet a du retard', 'Comment gérer un sponsor difficile ?', 'Qu\'est-ce que le modèle GBMC ?', 'Nos réunions sont improductives'],
+      footer: 'Pour les situations complexes, réservez une session de mentorat en direct',
+      systemPrompt: 'L\'utilisateur a sélectionné le français. Vous DEVEZ répondre exclusivement en français pendant toute cette conversation.',
+      greeting: 'Bonjour, je suis **CARA** — votre mentor IA en capacité d\'exécution, développé par GBMC.\n\nJe peux vous aider avec de vrais défis en gestion de projets, leadership d\'équipe, gouvernance et exécution organisationnelle — le tout ancré dans le **cadre GBMC**.\n\nSur quoi travaillez-vous aujourd\'hui ? Et pour vous offrir les conseils les plus pertinents — êtes-vous membre d\'équipe, chef de projet, professionnel PMO, ou dans un rôle de direction ?'
+    },
+    it: {
+      flag: '🇮🇹',
+      placeholder: 'Chiedi a CARA qualsiasi cosa su progetti, leadership...',
+      suggestLabel: 'Prova a chiedere',
+      suggestions: ['Il mio progetto è in ritardo', 'Come gestisco uno sponsor difficile?', 'Cos\'è il modello GBMC?', 'Le nostre riunioni sono improduttive'],
+      footer: 'Per situazioni complesse, prenota una sessione di mentoring dal vivo',
+      systemPrompt: 'L\'utente ha selezionato l\'italiano. Devi rispondere ESCLUSIVAMENTE in italiano per tutta questa conversazione.',
+      greeting: 'Ciao, sono **CARA** — il tuo Mentore AI per la capacità esecutiva, sviluppato da GBMC.\n\nPosso aiutarti con le sfide reali nella gestione dei progetti, leadership del team, governance ed esecuzione organizzativa — tutto fondato sul **framework GBMC**.\n\nSu cosa stai lavorando oggi? E per darti la guida più utile — sei un membro del team, un project leader, un professionista PMO o in un ruolo dirigenziale?'
+    },
+    zh: {
+      flag: '🇨🇳',
+      placeholder: '向CARA提问有关项目、领导力和执行力的任何问题...',
+      suggestLabel: '您可以尝试问',
+      suggestions: ['我的项目进度落后了', '如何应对难合作的项目发起人？', '什么是GBMC执行能力模型？', '我们的会议效率低下'],
+      footer: '对于复杂情况，请预约现场辅导会议',
+      systemPrompt: '用户已选择中文。您必须在整个对话中仅使用中文回复。',
+      greeting: '您好，我是**CARA**——由GBMC开发的执行能力AI导师。\n\n我可以帮助您解决项目管理、团队领导力、治理和组织执行中的实际挑战——全部基于**GBMC框架**。\n\n您今天在处理什么问题？为了给您提供最相关的指导——您是团队成员、项目负责人、PMO专业人员，还是管理或高管层？'
+    },
+    ar: {
+      flag: '🇸🇦',
+      placeholder: '...اسأل كارا أي شيء عن المشاريع والقيادة والتنفيذ',
+      suggestLabel: 'جرب أن تسأل',
+      suggestions: ['مشروعي متأخر عن الجدول الزمني', 'كيف أتعامل مع راعي مشروع صعب؟', 'ما هو نموذج GBMC للتنفيذ؟', 'اجتماعاتنا غير منتجة'],
+      footer: 'للحالات المعقدة، احجز جلسة إرشاد مباشرة',
+      systemPrompt: 'اختار المستخدم اللغة العربية. يجب عليك الرد باللغة العربية حصراً طوال هذه المحادثة.',
+      greeting: 'مرحباً، أنا **كارا** — مرشدك الذكي لقدرة التنفيذ، من تطوير GBMC.\n\nيمكنني مساعدتك في التحديات الحقيقية في إدارة المشاريع، وقيادة الفريق، والحوكمة، والتنفيذ التنظيمي — كل ذلك مبني على **إطار GBMC**.\n\nما الذي تعمل عليه اليوم؟ ولتقديم أفضل توجيه لك — هل أنت عضو فريق، أم قائد مشروع، أم متخصص في PMO، أم في دور إداري أو تنفيذي؟'
+    }
+  };
+
   let threadId = null;
   let isWaiting = false;
+  let currentLang = null;
 
-  // All API calls go through /api/cara — no key in this file
   async function callBackend(body) {
     const res = await fetch('/api/cara', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {'Content-Type': 'application/json'},
       body: JSON.stringify(body)
     });
     return res.json();
   }
 
+  async function selectLanguage(code, flag, name) {
+    currentLang = code;
+    const lang = LANGS[code];
+
+    // Hide gate, show chat
+    document.getElementById('langGate').style.display = 'none';
+    const wrapper = document.getElementById('chatWrapper');
+    wrapper.style.display = 'block';
+
+    // Set flag indicator
+    document.getElementById('langFlag').textContent = flag;
+
+    // Set placeholder
+    document.getElementById('userInput').placeholder = lang.placeholder;
+
+    // Set suggestions
+    document.getElementById('suggestLabel').textContent = lang.suggestLabel;
+    const sugs = lang.suggestions;
+    for (let i = 0; i < 4; i++) {
+      document.getElementById(`sug${i+1}`).textContent = sugs[i];
+    }
+
+    // Set footer
+    document.getElementById('footerExtra').textContent = lang.footer;
+
+    // RTL for Arabic
+    if (code === 'ar') {
+      document.getElementById('chatArea').classList.add('rtl');
+      document.getElementById('userInput').style.direction = 'rtl';
+    }
+
+    // Show typing and get CARA's greeting in chosen language
+    showTyping();
+
+    try {
+      // Create thread
+      const thread = await callBackend({action: 'createThread'});
+      threadId = thread.id;
+
+      // Send silent language instruction + greeting request
+      await callBackend({
+        action: 'addMessage',
+        threadId,
+        message: lang.systemPrompt + '\n\nPlease greet the user warmly in ' + name + ' and introduce yourself as CARA. Ask about their role (team member, project leader, PMO, or executive) and what they are working on. Keep it warm and concise.'
+      });
+
+      const run = await callBackend({action: 'runAssistant', threadId});
+      let status = run.status, runId = run.id;
+
+      while (status === 'queued' || status === 'in_progress') {
+        await new Promise(r => setTimeout(r, 1200));
+        const poll = await callBackend({action: 'getRunStatus', threadId, runId});
+        status = poll.status;
+      }
+
+      hideTyping();
+
+      if (status === 'completed') {
+        const msgs = await callBackend({action: 'getMessages', threadId});
+        const reply = msgs.data[0].content[0].text.value;
+        appendMessage('cara', reply);
+      } else {
+        // Fallback to static greeting
+        appendMessage('cara', lang.greeting);
+      }
+    } catch(err) {
+      hideTyping();
+      appendMessage('cara', lang.greeting);
+      console.error(err);
+    }
+  }
+
+  function resetLanguage() {
+    // Reset everything and show language selector again
+    threadId = null;
+    isWaiting = false;
+    currentLang = null;
+    document.getElementById('chatArea').innerHTML = '';
+    document.getElementById('chatArea').classList.remove('rtl');
+    document.getElementById('userInput').style.direction = 'ltr';
+    document.getElementById('suggestions').style.display = 'flex';
+    document.getElementById('chatWrapper').style.display = 'none';
+    document.getElementById('langGate').style.display = 'flex';
+  }
+
   function autoResize(el) {
     el.style.height = 'auto';
-    el.style.height = Math.min(el.scrollHeight, 120) + 'px';
+    el.style.height = Math.min(el.scrollHeight, 110) + 'px';
   }
 
   function handleKey(e) {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      sendMessage();
-    }
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
   }
 
   function sendSuggestion(btn) {
@@ -452,56 +423,41 @@
   }
 
   function getTime() {
-    return new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    return new Date().toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'});
   }
 
   function appendMessage(role, text) {
     const chatArea = document.getElementById('chatArea');
     const msgDiv = document.createElement('div');
     msgDiv.className = `msg ${role}`;
-
-    const avatarDiv = document.createElement('div');
-    avatarDiv.className = 'msg-avatar';
-    avatarDiv.textContent = role === 'cara' ? 'C' : 'You';
-
-    const contentDiv = document.createElement('div');
-    contentDiv.className = 'msg-content';
-
+    const av = document.createElement('div');
+    av.className = 'msg-avatar';
+    av.textContent = role === 'cara' ? 'C' : (currentLang === 'ar' ? 'أنت' : 'You');
+    const cd = document.createElement('div');
+    cd.className = 'msg-content';
     const bubble = document.createElement('div');
     bubble.className = 'bubble';
+    if (currentLang === 'ar') bubble.classList.add('rtl');
     bubble.innerHTML = formatText(text);
-
-    const timeDiv = document.createElement('div');
-    timeDiv.className = 'msg-time';
-    timeDiv.textContent = getTime();
-
-    contentDiv.appendChild(bubble);
-    contentDiv.appendChild(timeDiv);
-    msgDiv.appendChild(avatarDiv);
-    msgDiv.appendChild(contentDiv);
+    const time = document.createElement('div');
+    time.className = 'msg-time';
+    time.textContent = getTime();
+    cd.appendChild(bubble); cd.appendChild(time);
+    msgDiv.appendChild(av); msgDiv.appendChild(cd);
     chatArea.appendChild(msgDiv);
     chatArea.scrollTop = chatArea.scrollHeight;
   }
 
   function showTyping() {
-    const chatArea = document.getElementById('chatArea');
-    const typing = document.createElement('div');
-    typing.className = 'typing-indicator';
-    typing.id = 'typingIndicator';
-    typing.innerHTML = `
-      <div class="typing-avatar">C</div>
-      <div class="typing-bubble">
-        <div class="typing-dot"></div>
-        <div class="typing-dot"></div>
-        <div class="typing-dot"></div>
-      </div>`;
-    chatArea.appendChild(typing);
-    chatArea.scrollTop = chatArea.scrollHeight;
+    const ca = document.getElementById('chatArea');
+    const t = document.createElement('div');
+    t.className = 'typing-indicator'; t.id = 'typingIndicator';
+    t.innerHTML = '<div class="typing-avatar">C</div><div class="typing-bubble"><div class="typing-dot"></div><div class="typing-dot"></div><div class="typing-dot"></div></div>';
+    ca.appendChild(t); ca.scrollTop = ca.scrollHeight;
   }
 
   function hideTyping() {
-    const t = document.getElementById('typingIndicator');
-    if (t) t.remove();
+    const t = document.getElementById('typingIndicator'); if (t) t.remove();
   }
 
   function formatText(text) {
@@ -520,50 +476,33 @@
     const input = document.getElementById('userInput');
     const text = input.value.trim();
     if (!text) return;
-
-    input.value = '';
-    input.style.height = 'auto';
+    input.value = ''; input.style.height = 'auto';
     document.getElementById('suggestions').style.display = 'none';
     isWaiting = true;
     document.getElementById('sendBtn').disabled = true;
-
     appendMessage('user', text);
     showTyping();
-
     try {
-      if (!threadId) {
-        const thread = await callBackend({ action: 'createThread' });
-        threadId = thread.id;
-      }
-
-      await callBackend({ action: 'addMessage', threadId, message: text });
-
-      const run = await callBackend({ action: 'runAssistant', threadId });
-      let status = run.status;
-      let runId = run.id;
-
+      await callBackend({action: 'addMessage', threadId, message: text});
+      const run = await callBackend({action: 'runAssistant', threadId});
+      let status = run.status, runId = run.id;
       while (status === 'queued' || status === 'in_progress') {
         await new Promise(r => setTimeout(r, 1200));
-        const poll = await callBackend({ action: 'getRunStatus', threadId, runId });
+        const poll = await callBackend({action: 'getRunStatus', threadId, runId});
         status = poll.status;
       }
-
       if (status === 'completed') {
-        const msgs = await callBackend({ action: 'getMessages', threadId });
+        const msgs = await callBackend({action: 'getMessages', threadId});
         const reply = msgs.data[0].content[0].text.value;
-        hideTyping();
-        appendMessage('cara', reply);
+        hideTyping(); appendMessage('cara', reply);
       } else {
-        hideTyping();
-        appendMessage('cara', "I'm sorry, something went wrong. Please try again in a moment.");
+        hideTyping(); appendMessage('cara', '...');
       }
-
-    } catch (err) {
+    } catch(err) {
       hideTyping();
-      appendMessage('cara', "I'm having trouble connecting. Please try again shortly.");
+      appendMessage('cara', '...');
       console.error(err);
     }
-
     isWaiting = false;
     document.getElementById('sendBtn').disabled = false;
     input.focus();
