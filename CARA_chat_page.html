@@ -379,15 +379,119 @@
     font-weight: 500;
   }
 
+  /* API Key Gate Screen */
+  .key-gate {
+    position: fixed;
+    inset: 0;
+    background: rgba(15,31,56,0.85);
+    backdrop-filter: blur(6px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+    padding: 24px;
+    animation: fadeUp 0.4s ease both;
+  }
+
+  .key-gate-box {
+    background: #ffffff;
+    border-radius: 20px;
+    padding: 36px 32px;
+    max-width: 440px;
+    width: 100%;
+    box-shadow: 0 24px 80px rgba(15,31,56,0.3);
+  }
+
+  .key-gate-logo {
+    width: 52px; height: 52px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, var(--gold) 0%, var(--gold-light) 100%);
+    display: flex; align-items: center; justify-content: center;
+    font-family: 'Playfair Display', serif;
+    font-size: 22px; font-weight: 600;
+    color: var(--navy);
+    margin-bottom: 20px;
+  }
+
+  .key-gate-box h2 {
+    font-family: 'Playfair Display', serif;
+    font-size: 22px;
+    color: var(--navy);
+    margin-bottom: 6px;
+  }
+
+  .key-gate-box p {
+    font-size: 13.5px;
+    color: var(--text-mid);
+    line-height: 1.6;
+    margin-bottom: 24px;
+  }
+
+  .key-gate-box label {
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--text-mid);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    display: block;
+    margin-bottom: 8px;
+  }
+
+  .key-input {
+    width: 100%;
+    padding: 12px 16px;
+    border: 1.5px solid var(--cream-dark);
+    border-radius: 12px;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 13px;
+    color: var(--text-dark);
+    background: var(--cream);
+    outline: none;
+    transition: border-color 0.2s;
+    margin-bottom: 8px;
+  }
+
+  .key-input:focus { border-color: var(--gold); box-shadow: 0 0 0 3px rgba(201,168,76,0.1); }
+
+  .key-hint {
+    font-size: 11.5px;
+    color: var(--text-light);
+    margin-bottom: 20px;
+  }
+
+  .key-error {
+    font-size: 12px;
+    color: #dc2626;
+    margin-bottom: 12px;
+    display: none;
+  }
+
+  .key-submit {
+    width: 100%;
+    padding: 13px;
+    background: var(--navy);
+    color: white;
+    border: none;
+    border-radius: 12px;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 15px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background 0.2s;
+  }
+
+  .key-submit:hover { background: var(--navy-light); }
+
+  .key-note {
+    font-size: 11.5px;
+    color: var(--text-light);
+    text-align: center;
+    margin-top: 14px;
+    line-height: 1.5;
+  }
+
   /* Config warning */
   .config-warning {
-    background: #fef3cd;
-    border: 1px solid #f6cc5a;
-    border-radius: 10px;
-    padding: 14px 18px;
-    margin-bottom: 16px;
-    font-size: 13px;
-    color: #7a5c00;
     display: none;
   }
 
@@ -409,6 +513,21 @@
 </style>
 </head>
 <body>
+
+<!-- Passcode Gate -->
+<div class="key-gate" id="keyGate">
+  <div class="key-gate-box">
+    <div class="key-gate-logo">C</div>
+    <h2>Welcome to CARA</h2>
+    <p>Your AI Mentor for Execution Capability, powered by the GBMC framework. Enter your access code to begin.</p>
+    <label for="keyInput">Access Code</label>
+    <input type="password" class="key-input" id="keyInput" placeholder="Enter access code..." autocomplete="off" />
+    <div class="key-hint">You should have received this code from the GBMC team.</div>
+    <div class="key-error" id="keyError">Incorrect access code. Please check and try again.</div>
+    <button class="key-submit" onclick="submitKey()">Start Conversation →</button>
+    <div class="key-note">🔒 This session is private and secure.</div>
+  </div>
+</div>
 
 <div class="wrapper">
 
@@ -474,23 +593,33 @@
 </div>
 
 <script>
-  // ============================================================
-  // CONFIGURATION — paste your API key below (between the quotes)
-  // ============================================================
-  const OPENAI_API_KEY = "YOUR_API_KEY_HERE";
-  const ASSISTANT_ID   = "asst_Ft2LdqOrJbvU2FMJcZgWeg8V";
-  // ============================================================
-
+  const ASSISTANT_ID = "asst_Ft2LdqOrJbvU2FMJcZgWeg8V";
+  let OPENAI_API_KEY = "";
   let threadId = null;
   let isWaiting = false;
-  const conversationHistory = [];
 
-  // Show warning if key not configured
-  window.addEventListener('DOMContentLoaded', () => {
-    if (OPENAI_API_KEY === "YOUR_API_KEY_HERE") {
-      document.getElementById('configWarning').style.display = 'block';
-    }
+  // Passcode map — replace YOUR_API_KEY_HERE with your real OpenAI API key
+  const PASSCODES = {
+    "GBMC2026": "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"
+  };
+
+  document.addEventListener('DOMContentLoaded', () => {
+    document.getElementById('keyInput').addEventListener('keydown', function(e) {
+      if (e.key === 'Enter') submitKey();
+    });
   });
+
+  function submitKey() {
+    const val = document.getElementById('keyInput').value.trim().toUpperCase();
+    const errEl = document.getElementById('keyError');
+    if (PASSCODES[val]) {
+      errEl.style.display = 'none';
+      OPENAI_API_KEY = PASSCODES[val];
+      document.getElementById('keyGate').style.display = 'none';
+    } else {
+      errEl.style.display = 'block';
+    }
+  }
 
   function autoResize(el) {
     el.style.height = 'auto';
@@ -517,7 +646,6 @@
 
   function appendMessage(role, text) {
     const chatArea = document.getElementById('chatArea');
-
     const msgDiv = document.createElement('div');
     msgDiv.className = `msg ${role}`;
 
@@ -566,7 +694,6 @@
   }
 
   function formatText(text) {
-    // Convert markdown-like formatting to HTML
     return text
       .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
       .replace(/\*(.*?)\*/g, '<em>$1</em>')
@@ -597,10 +724,6 @@
     const input = document.getElementById('userInput');
     const text = input.value.trim();
     if (!text) return;
-    if (OPENAI_API_KEY === "YOUR_API_KEY_HERE") {
-      alert("Please configure your API key first.");
-      return;
-    }
 
     input.value = '';
     input.style.height = 'auto';
@@ -612,12 +735,10 @@
     showTyping();
 
     try {
-      // Create thread on first message
       if (!threadId) {
         threadId = await createThread();
       }
 
-      // Add message to thread
       await fetch(`https://api.openai.com/v1/threads/${threadId}/messages`, {
         method: 'POST',
         headers: {
@@ -628,7 +749,6 @@
         body: JSON.stringify({ role: 'user', content: text })
       });
 
-      // Run the assistant
       const runRes = await fetch(`https://api.openai.com/v1/threads/${threadId}/runs`, {
         method: 'POST',
         headers: {
@@ -640,7 +760,6 @@
       });
       const run = await runRes.json();
 
-      // Poll for completion
       let status = run.status;
       let runId = run.id;
       while (status === 'queued' || status === 'in_progress') {
@@ -656,7 +775,6 @@
       }
 
       if (status === 'completed') {
-        // Get latest message
         const msgsRes = await fetch(`https://api.openai.com/v1/threads/${threadId}/messages?limit=1`, {
           headers: {
             'Authorization': `Bearer ${OPENAI_API_KEY}`,
@@ -669,12 +787,12 @@
         appendMessage('cara', reply);
       } else {
         hideTyping();
-        appendMessage('cara', "I'm sorry, something went wrong on my end. Please try again in a moment.");
+        appendMessage('cara', "I'm sorry, something went wrong. Please try again in a moment.");
       }
 
     } catch (err) {
       hideTyping();
-      appendMessage('cara', "I'm having trouble connecting right now. Please check your connection and try again.");
+      appendMessage('cara', "I'm having trouble connecting. Please check your API key and try refreshing the page.");
       console.error(err);
     }
 
