@@ -513,7 +513,6 @@
 
   // ── File upload ──────────────────────────────────────────────────
   let pendingFile = null;
-  let pendingFileId = null;
 
   const SUPPORTED_TYPES = [
     'application/pdf',
@@ -544,35 +543,32 @@
       return;
     }
     pendingFile = file;
-    pendingFileId = null;
     document.getElementById('filePreviewName').textContent = file.name;
     document.getElementById('filePreview').classList.add('visible');
   }
 
   function removeFile() {
     pendingFile = null;
-    pendingFileId = null;
     document.getElementById('fileInput').value = '';
     document.getElementById('filePreview').classList.remove('visible');
   }
 
-  async function uploadFileToOpenAI(file) {
+  async function extractFileText(file) {
     return new Promise((resolve, reject) => {
-      // Timeout after 30 seconds
-      const timeout = setTimeout(() => reject(new Error('Upload timed out')), 30000);
+      const timeout = setTimeout(() => reject(new Error('File processing timed out')), 45000);
       const reader = new FileReader();
       reader.onload = async (e) => {
         const base64 = e.target.result.split(',')[1];
         try {
           const result = await callBackend({
-            action: 'uploadFile',
+            action: 'extractFile',
             fileData: base64,
             fileName: file.name,
             fileType: file.type || 'application/octet-stream'
           });
           clearTimeout(timeout);
-          if (result.id) resolve(result.id);
-          else reject(new Error(JSON.stringify(result)));
+          if (result.success && result.text) resolve({ text: result.text, fileName: result.fileName });
+          else reject(new Error(result.error || 'Could not extract text from file'));
         } catch(err) { clearTimeout(timeout); reject(err); }
       };
       reader.onerror = () => { clearTimeout(timeout); reject(new Error('Could not read file')); };
@@ -592,29 +588,26 @@
     appendMessage('user', text);
     showTyping();
     try {
-      // Upload file if pending
-      let fileIdToSend = null;
-      if (pendingFile && !pendingFileId) {
+      // Extract file text if pending and include in message
+      let finalMessage = text;
+      if (pendingFile) {
         try {
-          console.log('Uploading file...');
-          pendingFileId = await uploadFileToOpenAI(pendingFile);
-          fileIdToSend = pendingFileId;
-          console.log('File uploaded successfully:', pendingFileId);
+          console.log('Extracting file text...');
+          const extracted = await extractFileText(pendingFile);
+          finalMessage = text + '\n\n[User attached a file: ' + extracted.fileName + ']\n\nFile contents:\n' + extracted.text;
+          console.log('File text extracted, total message length:', finalMessage.length);
           removeFile();
         } catch(err) {
-          console.error('File upload failed:', err);
+          console.error('File extraction failed:', err);
           hideTyping();
-          appendMessage('cara', 'I had trouble reading that file. Could you try again, or paste the key content directly into the chat?');
+          appendMessage('cara', 'I had trouble reading that file. Please try a PDF or plain text file, or paste the content directly into the chat.');
           isWaiting = false;
           document.getElementById('sendBtn').disabled = false;
           removeFile();
           return;
         }
-      } else if (pendingFileId) {
-        fileIdToSend = pendingFileId;
-        removeFile();
       }
-      await callBackend({action: 'addMessage', threadId, message: text, fileId: fileIdToSend, sessionId: sessionId, language: currentLang});
+      await callBackend({action: 'addMessage', threadId, message: finalMessage, sessionId: sessionId, language: currentLang});
       const run = await callBackend({action: 'runAssistant', threadId});
       let status = run.status, runId = run.id;
       let pollCount = 0;
