@@ -1,4 +1,3 @@
-// Increase body size limit for file uploads
 export const config = {
   api: {
     bodyParser: {
@@ -22,7 +21,7 @@ export default async function handler(req, res) {
   const PRIVATE_KEY    = (process.env.GOOGLE_PRIVATE_KEY || '').replace(/\\n/g, '\n');
 
   const body = req.body;
-  const { action, threadId, message, runId, language, sessionId, fileId } = body;
+  const { action, threadId, message, runId, language, sessionId } = body;
 
   const openaiHeaders = {
     'Authorization': `Bearer ${OPENAI_API_KEY}`,
@@ -30,7 +29,7 @@ export default async function handler(req, res) {
     'OpenAI-Beta': 'assistants=v2'
   };
 
-  // ── Google Sheets logging ───────────────────────────────────────────────────
+  // ── Google Sheets logging ───────────────────────────────────────────────
   async function getGoogleToken() {
     const now = Math.floor(Date.now() / 1000);
     const b64 = (obj) => Buffer.from(JSON.stringify(obj)).toString('base64url');
@@ -66,9 +65,87 @@ export default async function handler(req, res) {
     } catch (e) { console.error('Sheet log error:', e.message); }
   }
 
+  // ── Extract text from PDF using OpenAI vision ───────────────────────────
+  async function extractTextFromFile(fileData, fileName, fileType) {
+    // For PDFs and docs, use OpenAI to extract/summarize the content
+    // Send as a message to a temporary chat completion
+    const base64 = fileData;
+    
+    if (fileType === 'application/pdf') {
+      // Use GPT-4o to read the PDF
+      const extractRes = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${OPENAI_API_KEY}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          model: 'gpt-4o',
+          max_tokens: 4000,
+          messages: [{
+            role: 'user',
+            content: [
+              {
+                type: 'text',
+                text: 'Please extract and return ALL the text content from this document. Return the text as-is, preserving structure. Do not summarize - return the actual content.'
+              },
+              {
+                type: 'image_url',
+                image_url: {
+                  url: `data:application/pdf;base64,${base64}`,
+                  detail: 'high'
+                }
+              }
+            ]
+          }]
+        })
+      });
+      const extractData = await extractRes.json();
+      return extractData.choices?.[0]?.message?.content || null;
+    }
+    
+    // For Word docs and text files, decode directly
+    if (fileType === 'text/plain' || fileType === 'text/markdown' || fileType === 'text/csv') {
+      const buffer = Buffer.from(base64, 'base64');
+      return buffer.toString('utf-8').slice(0, 15000); // limit to 15k chars
+    }
+
+    // For Word docs - extract raw text from XML
+    if (fileType === 'application/msword' || 
+        fileType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
+      try {
+        const buffer = Buffer.from(base64, 'base64');
+        // Try to extract readable text - look for text patterns
+        const str = buffer.toString('utf-8', 0, Math.min(buffer.length, 500000));
+        // Extract text between XML tags for docx
+        const textMatches = str.match(/<w:t[^>]*>([^<]+)<\/w:t>/g) || [];
+        if (textMatches.length > 0) {
+          const text = textMatches
+            .map(m => m.replace(/<[^>]+>/g, ''))
+            .join(' ')
+            .replace(/\s+/g, ' ')
+            .trim()
+            .slice(0, 15000);
+          return text;
+        }
+        // Fallback: extract any readable ASCII text
+        const readable = str.replace(/[^\x20-\x7E\n\r\t]/g, ' ')
+          .replace(/\s+/g, ' ')
+          .trim()
+          .slice(0, 8000);
+        return readable.length > 100 ? readable : null;
+      } catch(e) {
+        console.error('Word extraction error:', e.message);
+        return null;
+      }
+    }
+
+    return null;
+  }
+
   try {
 
-    // ── Create thread ───────────────────────────────────────────────────────
+    // ── Create thread ─────────────────────────────────────────────────────
     if (action === 'createThread') {
       const r = await fetch('https://api.openai.com/v1/threads', {
         method: 'POST', headers: openaiHeaders, body: JSON.stringify({})
@@ -76,56 +153,27 @@ export default async function handler(req, res) {
       return res.status(200).json(await r.json());
     }
 
-    // ── Upload file ─────────────────────────────────────────────────────────
-    if (action === 'uploadFile') {
+    // ── Extract file text (new approach - no file attachment) ─────────────
+    if (action === 'extractFile') {
       const { fileData, fileName, fileType } = body;
       if (!fileData || !fileName) return res.status(400).json({ error: 'Missing file data' });
 
-      console.log('Uploading file:', fileName, 'type:', fileType, 'size:', fileData.length);
-
-      const fileBuffer = Buffer.from(fileData, 'base64');
-      const boundary = '----VercelFormBoundary' + Math.random().toString(16).slice(2);
-      const CRLF = '\r\n';
-
-      const parts = [];
-      // Purpose part
-      parts.push(Buffer.from(
-        `--${boundary}${CRLF}` +
-        `Content-Disposition: form-data; name="purpose"${CRLF}${CRLF}` +
-        `assistants${CRLF}`
-      ));
-      // File part
-      parts.push(Buffer.from(
-        `--${boundary}${CRLF}` +
-        `Content-Disposition: form-data; name="file"; filename="${fileName}"${CRLF}` +
-        `Content-Type: ${fileType || 'application/octet-stream'}${CRLF}${CRLF}`
-      ));
-      parts.push(fileBuffer);
-      parts.push(Buffer.from(`${CRLF}--${boundary}--${CRLF}`));
-
-      const formBody = Buffer.concat(parts);
-      console.log('Form body size:', formBody.length, 'bytes');
-
-      const uploadRes = await fetch('https://api.openai.com/v1/files', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${OPENAI_API_KEY}`,
-          'Content-Type': `multipart/form-data; boundary=${boundary}`
-        },
-        body: formBody
-      });
-
-      const uploadData = await uploadRes.json();
-      console.log('OpenAI upload response status:', uploadRes.status);
-      console.log('OpenAI upload response:', JSON.stringify(uploadData));
-
-      if (!uploadRes.ok) {
-        return res.status(400).json({ error: uploadData.error?.message || 'Upload failed', details: uploadData });
+      console.log('Extracting text from:', fileName, 'type:', fileType);
+      
+      const extractedText = await extractTextFromFile(fileData, fileName, fileType);
+      
+      if (!extractedText || extractedText.length < 50) {
+        return res.status(200).json({ 
+          success: false, 
+          error: 'Could not extract readable text from this file' 
+        });
       }
-      return res.status(200).json(uploadData);
+
+      console.log('Extracted', extractedText.length, 'characters from', fileName);
+      return res.status(200).json({ success: true, text: extractedText, fileName });
     }
 
-    // ── Add message ─────────────────────────────────────────────────────────
+    // ── Add message ───────────────────────────────────────────────────────
     if (action === 'addMessage') {
       const isSystemMsg = message && (
         message.includes('MUST respond exclusively') ||
@@ -139,17 +187,13 @@ export default async function handler(req, res) {
       }
 
       const msgBody = { role: 'user', content: message };
-      if (fileId) {
-        msgBody.attachments = [{ file_id: fileId, tools: [{ type: 'file_search' }] }];
-      }
-
       const r = await fetch(`https://api.openai.com/v1/threads/${threadId}/messages`, {
         method: 'POST', headers: openaiHeaders, body: JSON.stringify(msgBody)
       });
       return res.status(200).json(await r.json());
     }
 
-    // ── Run assistant ───────────────────────────────────────────────────────
+    // ── Run assistant ─────────────────────────────────────────────────────
     if (action === 'runAssistant') {
       const r = await fetch(`https://api.openai.com/v1/threads/${threadId}/runs`, {
         method: 'POST', headers: openaiHeaders,
@@ -158,7 +202,7 @@ export default async function handler(req, res) {
       return res.status(200).json(await r.json());
     }
 
-    // ── Poll run status ─────────────────────────────────────────────────────
+    // ── Poll run status ───────────────────────────────────────────────────
     if (action === 'getRunStatus') {
       const r = await fetch(`https://api.openai.com/v1/threads/${threadId}/runs/${runId}`, {
         headers: openaiHeaders
@@ -166,7 +210,7 @@ export default async function handler(req, res) {
       return res.status(200).json(await r.json());
     }
 
-    // ── Get messages ────────────────────────────────────────────────────────
+    // ── Get messages ──────────────────────────────────────────────────────
     if (action === 'getMessages') {
       const r = await fetch(`https://api.openai.com/v1/threads/${threadId}/messages?limit=1`, {
         headers: openaiHeaders
