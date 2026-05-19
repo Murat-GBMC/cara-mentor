@@ -1,3 +1,12 @@
+// Increase body size limit for file uploads
+export const config = {
+  api: {
+    bodyParser: {
+      sizeLimit: '25mb'
+    }
+  }
+};
+
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
@@ -72,49 +81,46 @@ export default async function handler(req, res) {
       const { fileData, fileName, fileType } = body;
       if (!fileData || !fileName) return res.status(400).json({ error: 'Missing file data' });
 
+      console.log('Uploading file:', fileName, 'type:', fileType, 'size:', fileData.length);
+
       const fileBuffer = Buffer.from(fileData, 'base64');
-      const boundary = 'Boundary' + Date.now();
+      const boundary = '----VercelFormBoundary' + Math.random().toString(16).slice(2);
       const CRLF = '\r\n';
 
-      const purposePart = [
-        `--${boundary}`,
-        `Content-Disposition: form-data; name="purpose"`,
-        '',
-        'assistants'
-      ].join(CRLF);
+      const parts = [];
+      // Purpose part
+      parts.push(Buffer.from(
+        `--${boundary}${CRLF}` +
+        `Content-Disposition: form-data; name="purpose"${CRLF}${CRLF}` +
+        `assistants${CRLF}`
+      ));
+      // File part
+      parts.push(Buffer.from(
+        `--${boundary}${CRLF}` +
+        `Content-Disposition: form-data; name="file"; filename="${fileName}"${CRLF}` +
+        `Content-Type: ${fileType || 'application/octet-stream'}${CRLF}${CRLF}`
+      ));
+      parts.push(fileBuffer);
+      parts.push(Buffer.from(`${CRLF}--${boundary}--${CRLF}`));
 
-      const fileHeader = [
-        `--${boundary}`,
-        `Content-Disposition: form-data; name="file"; filename="${fileName}"`,
-        `Content-Type: ${fileType || 'application/octet-stream'}`,
-        '',
-        ''
-      ].join(CRLF);
-
-      const closing = `${CRLF}--${boundary}--`;
-
-      const bodyBuffer = Buffer.concat([
-        Buffer.from(purposePart + CRLF),
-        Buffer.from(fileHeader),
-        fileBuffer,
-        Buffer.from(closing)
-      ]);
+      const formBody = Buffer.concat(parts);
+      console.log('Form body size:', formBody.length, 'bytes');
 
       const uploadRes = await fetch('https://api.openai.com/v1/files', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${OPENAI_API_KEY}`,
-          'Content-Type': `multipart/form-data; boundary=${boundary}`,
-          'Content-Length': bodyBuffer.length.toString()
+          'Content-Type': `multipart/form-data; boundary=${boundary}`
         },
-        body: bodyBuffer
+        body: formBody
       });
 
       const uploadData = await uploadRes.json();
-      console.log('OpenAI file upload response:', JSON.stringify(uploadData));
+      console.log('OpenAI upload response status:', uploadRes.status);
+      console.log('OpenAI upload response:', JSON.stringify(uploadData));
 
       if (!uploadRes.ok) {
-        return res.status(400).json({ error: uploadData.error?.message || 'Upload failed' });
+        return res.status(400).json({ error: uploadData.error?.message || 'Upload failed', details: uploadData });
       }
       return res.status(200).json(uploadData);
     }
