@@ -149,6 +149,16 @@
   .send-btn:active { transform:scale(0.96); }
   .send-btn:disabled { background:var(--border);cursor:not-allowed;transform:none;box-shadow:none; }
   .send-btn svg { width:16px;height:16px;fill:none;stroke:white;stroke-width:2.2; }
+  .attach-btn { width:34px;height:34px;background:transparent;border:1.5px solid var(--border);border-radius:9px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all 0.18s ease;flex-shrink:0;margin-bottom:2px; }
+  .attach-btn:hover { border-color:var(--teal);background:var(--teal-light); }
+  .attach-btn svg { width:15px;height:15px;fill:none;stroke:var(--text-light);stroke-width:2; }
+  .attach-btn:hover svg { stroke:var(--teal-dark); }
+  .file-preview { display:none;align-items:center;gap:8px;padding:7px 16px;background:var(--teal-light);border-top:1px solid rgba(111,200,204,0.25);font-size:12px;color:var(--teal-dark);font-weight:500; }
+  .file-preview.visible { display:flex; }
+  .file-preview-name { flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap; }
+  .file-remove { cursor:pointer;font-size:16px;line-height:1;padding:0 2px;color:var(--teal-dark); }
+  .file-remove:hover { color:#e53e3e; }
+  #fileInput { display:none; }
 
   .footer-note { text-align:center;font-size:11px;color:var(--text-light);padding:10px 20px;background:#fff;border-top:1px solid var(--border); }
   .footer-note span { color:var(--teal-dark);font-weight:600; }
@@ -236,10 +246,19 @@
     <button class="suggestion-btn" id="sug4" onclick="sendSuggestion(this)"></button>
   </div>
 
+  <input type="file" id="fileInput" accept=".pdf,.doc,.docx,.txt,.pptx,.xlsx" onchange="handleFileSelect(event)">
+  <div class="file-preview" id="filePreview">
+    <span>📎</span>
+    <span class="file-preview-name" id="filePreviewName"></span>
+    <span class="file-remove" onclick="removeFile()" title="Remove file">×</span>
+  </div>
   <div class="input-area">
     <div class="input-wrap">
       <textarea id="userInput" rows="1" onkeydown="handleKey(event)" oninput="autoResize(this)"></textarea>
     </div>
+    <button class="attach-btn" onclick="document.getElementById('fileInput').click()" title="Attach file">
+      <svg viewBox="0 0 24 24"><path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"/></svg>
+    </button>
     <button class="send-btn" id="sendBtn" onclick="sendMessage()" title="Send">
       <svg viewBox="0 0 24 24"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
     </button>
@@ -471,6 +490,46 @@
       .replace(/^(.+)$/, '<p>$1</p>');
   }
 
+  // ── File upload ──────────────────────────────────────────────────
+  let pendingFile = null;
+  let pendingFileId = null;
+
+  function handleFileSelect(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+    pendingFile = file;
+    pendingFileId = null;
+    document.getElementById('filePreviewName').textContent = file.name;
+    document.getElementById('filePreview').classList.add('visible');
+  }
+
+  function removeFile() {
+    pendingFile = null;
+    pendingFileId = null;
+    document.getElementById('fileInput').value = '';
+    document.getElementById('filePreview').classList.remove('visible');
+  }
+
+  async function uploadFileToOpenAI(file) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = async (e) => {
+        const base64 = e.target.result.split(',')[1];
+        try {
+          const result = await callBackend({
+            action: 'uploadFile',
+            fileData: base64,
+            fileName: file.name,
+            fileType: file.type
+          });
+          if (result.id) resolve(result.id);
+          else reject(new Error('Upload failed'));
+        } catch(err) { reject(err); }
+      };
+      reader.readAsDataURL(file);
+    });
+  }
+
   async function sendMessage() {
     if (isWaiting) return;
     const input = document.getElementById('userInput');
@@ -483,7 +542,20 @@
     appendMessage('user', text);
     showTyping();
     try {
-      await callBackend({action: 'addMessage', threadId, message: text});
+      // Upload file if pending
+      let fileIdToSend = null;
+      if (pendingFile && !pendingFileId) {
+        try {
+          appendSystemNote('📎 Uploading file...');
+          pendingFileId = await uploadFileToOpenAI(pendingFile);
+          fileIdToSend = pendingFileId;
+          removeFile();
+        } catch(err) { console.error('File upload failed:', err); }
+      } else if (pendingFileId) {
+        fileIdToSend = pendingFileId;
+        removeFile();
+      }
+      await callBackend({action: 'addMessage', threadId, message: text, fileId: fileIdToSend, sessionId: sessionId, language: currentLang});
       const run = await callBackend({action: 'runAssistant', threadId});
       let status = run.status, runId = run.id;
       while (status === 'queued' || status === 'in_progress') {
