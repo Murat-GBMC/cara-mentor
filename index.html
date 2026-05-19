@@ -246,7 +246,7 @@
     <button class="suggestion-btn" id="sug4" onclick="sendSuggestion(this)"></button>
   </div>
 
-  <input type="file" id="fileInput" accept=".pdf,.doc,.docx,.txt,.pptx,.xlsx" onchange="handleFileSelect(event)">
+  <input type="file" id="fileInput" accept=".pdf,.doc,.docx,.txt,.pptx,.md,.csv" onchange="handleFileSelect(event)">
   <div class="input-area">
     <button class="attach-btn" onclick="document.getElementById('fileInput').click()" title="Attach file">
       <svg viewBox="0 0 24 24"><path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"/></svg>
@@ -494,9 +494,34 @@
   let pendingFile = null;
   let pendingFileId = null;
 
+  const SUPPORTED_TYPES = [
+    'application/pdf',
+    'application/msword',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    'text/plain',
+    'text/markdown',
+    'text/csv',
+    'application/vnd.ms-powerpoint',
+    'application/vnd.openxmlformats-officedocument.presentationml.presentation'
+  ];
+  const SUPPORTED_EXT = ['.pdf','.doc','.docx','.txt','.md','.csv','.ppt','.pptx'];
+
   function handleFileSelect(event) {
     const file = event.target.files[0];
     if (!file) return;
+    // Validate file type
+    const ext = '.' + file.name.split('.').pop().toLowerCase();
+    if (!SUPPORTED_EXT.includes(ext)) {
+      alert('Unsupported file type. Please upload: PDF, Word (.doc/.docx), PowerPoint (.pptx), text (.txt), CSV, or Markdown (.md) files.');
+      document.getElementById('fileInput').value = '';
+      return;
+    }
+    // Validate file size (max 20MB)
+    if (file.size > 20 * 1024 * 1024) {
+      alert('File is too large. Maximum size is 20MB.');
+      document.getElementById('fileInput').value = '';
+      return;
+    }
     pendingFile = file;
     pendingFileId = null;
     document.getElementById('filePreviewName').textContent = file.name;
@@ -512,6 +537,8 @@
 
   async function uploadFileToOpenAI(file) {
     return new Promise((resolve, reject) => {
+      // Timeout after 30 seconds
+      const timeout = setTimeout(() => reject(new Error('Upload timed out')), 30000);
       const reader = new FileReader();
       reader.onload = async (e) => {
         const base64 = e.target.result.split(',')[1];
@@ -520,12 +547,14 @@
             action: 'uploadFile',
             fileData: base64,
             fileName: file.name,
-            fileType: file.type
+            fileType: file.type || 'application/octet-stream'
           });
+          clearTimeout(timeout);
           if (result.id) resolve(result.id);
-          else reject(new Error('Upload failed'));
-        } catch(err) { reject(err); }
+          else reject(new Error(result.error || 'Upload failed'));
+        } catch(err) { clearTimeout(timeout); reject(err); }
       };
+      reader.onerror = () => { clearTimeout(timeout); reject(new Error('Could not read file')); };
       reader.readAsDataURL(file);
     });
   }
@@ -549,8 +578,17 @@
           appendSystemNote('📎 Uploading file...');
           pendingFileId = await uploadFileToOpenAI(pendingFile);
           fileIdToSend = pendingFileId;
+          appendSystemNote('✅ File uploaded');
           removeFile();
-        } catch(err) { console.error('File upload failed:', err); }
+        } catch(err) {
+          console.error('File upload failed:', err);
+          hideTyping();
+          appendMessage('cara', '⚠️ Sorry, I could not process that file. Please try a PDF, Word document, or text file instead.');
+          isWaiting = false;
+          document.getElementById('sendBtn').disabled = false;
+          removeFile();
+          return;
+        }
       } else if (pendingFileId) {
         fileIdToSend = pendingFileId;
         removeFile();
