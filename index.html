@@ -391,19 +391,31 @@
       let status = run.status, runId = run.id;
 
       let pollCount = 0;
-      const maxPolls = 40; // 40 x 1.5s = 60 seconds max
+      const maxPolls = 90; // 90 x 2s = 3 minutes max
+      let shownThinkingMsg = false;
       while ((status === 'queued' || status === 'in_progress') && pollCount < maxPolls) {
-        await new Promise(r => setTimeout(r, 1500));
-        const poll = await callBackend({action: 'getRunStatus', threadId, runId});
-        status = poll.status;
+        await new Promise(r => setTimeout(r, 2000));
+        // Show "still reading" message after 20 seconds with a file
+        if (pollCount === 10 && !shownThinkingMsg) {
+          shownThinkingMsg = true;
+          const typingEl = document.getElementById('typingIndicator');
+          if (typingEl) {
+            const note = typingEl.querySelector('.typing-bubble');
+            if (note) note.innerHTML += '<span style="font-size:11px;color:#94a3b8;margin-left:8px;">Reading your file...</span>';
+          }
+        }
+        try {
+          const poll = await callBackend({action: 'getRunStatus', threadId, runId});
+          status = poll.status;
+        } catch(e) {
+          console.warn('Poll error:', e.message);
+          // Don't break on network error, keep trying
+        }
         pollCount++;
         console.log('Poll', pollCount, 'status:', status);
-        // Break early on terminal failure states
         if (['failed','cancelled','expired','requires_action'].includes(status)) break;
       }
-      if (pollCount >= maxPolls) {
-        status = 'timeout';
-      }
+      if (pollCount >= maxPolls) status = 'timeout';
 
       hideTyping();
 
@@ -606,19 +618,31 @@
       const run = await callBackend({action: 'runAssistant', threadId});
       let status = run.status, runId = run.id;
       let pollCount = 0;
-      const maxPolls = 40; // 40 x 1.5s = 60 seconds max
+      const maxPolls = 90; // 90 x 2s = 3 minutes max
+      let shownThinkingMsg = false;
       while ((status === 'queued' || status === 'in_progress') && pollCount < maxPolls) {
-        await new Promise(r => setTimeout(r, 1500));
-        const poll = await callBackend({action: 'getRunStatus', threadId, runId});
-        status = poll.status;
+        await new Promise(r => setTimeout(r, 2000));
+        // Show "still reading" message after 20 seconds with a file
+        if (pollCount === 10 && !shownThinkingMsg) {
+          shownThinkingMsg = true;
+          const typingEl = document.getElementById('typingIndicator');
+          if (typingEl) {
+            const note = typingEl.querySelector('.typing-bubble');
+            if (note) note.innerHTML += '<span style="font-size:11px;color:#94a3b8;margin-left:8px;">Reading your file...</span>';
+          }
+        }
+        try {
+          const poll = await callBackend({action: 'getRunStatus', threadId, runId});
+          status = poll.status;
+        } catch(e) {
+          console.warn('Poll error:', e.message);
+          // Don't break on network error, keep trying
+        }
         pollCount++;
         console.log('Poll', pollCount, 'status:', status);
-        // Break early on terminal failure states
         if (['failed','cancelled','expired','requires_action'].includes(status)) break;
       }
-      if (pollCount >= maxPolls) {
-        status = 'timeout';
-      }
+      if (pollCount >= maxPolls) status = 'timeout';
       if (status === 'completed') {
         const msgs = await callBackend({action: 'getMessages', threadId});
         const reply = msgs.data[0].content[0].text.value;
