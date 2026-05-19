@@ -551,7 +551,7 @@
           });
           clearTimeout(timeout);
           if (result.id) resolve(result.id);
-          else reject(new Error(result.error || 'Upload failed'));
+          else reject(new Error(JSON.stringify(result)));
         } catch(err) { clearTimeout(timeout); reject(err); }
       };
       reader.onerror = () => { clearTimeout(timeout); reject(new Error('Could not read file')); };
@@ -583,7 +583,7 @@
         } catch(err) {
           console.error('File upload failed:', err);
           hideTyping();
-          appendMessage('cara', '⚠️ Sorry, I could not process that file. Please try a PDF, Word document, or text file instead.');
+          appendMessage('cara', '⚠️ File upload error: ' + err.message + '. Check browser console for details.');
           isWaiting = false;
           document.getElementById('sendBtn').disabled = false;
           removeFile();
