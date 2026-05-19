@@ -53,15 +53,26 @@ export default async function handler(req, res) {
 
   async function logToSheet(sid, lang, msg) {
     try {
+      if (!SHEET_ID || !CLIENT_EMAIL || !PRIVATE_KEY) {
+        console.error('Sheet logging: missing env vars', { SHEET_ID: !!SHEET_ID, CLIENT_EMAIL: !!CLIENT_EMAIL, PRIVATE_KEY: !!PRIVATE_KEY });
+        return;
+      }
       const token = await getGoogleToken();
-      await fetch(
-        `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/Sheet1!A:D:append?valueInputOption=RAW`,
+      if (!token) { console.error('Sheet logging: failed to get token'); return; }
+      const sheetRes = await fetch(
+        `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/A1:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`,
         {
           method: 'POST',
           headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
           body: JSON.stringify({ values: [[new Date().toISOString(), sid || '', lang || '', msg]] })
         }
       );
+      const sheetData = await sheetRes.json();
+      if (!sheetRes.ok) {
+        console.error('Sheet log failed:', JSON.stringify(sheetData));
+      } else {
+        console.log('Sheet log success:', sheetData.updates?.updatedRange);
+      }
     } catch (e) { console.error('Sheet log error:', e.message); }
   }
 
@@ -195,9 +206,17 @@ export default async function handler(req, res) {
 
     // ── Run assistant ─────────────────────────────────────────────────────
     if (action === 'runAssistant') {
+      const hasFile = body.hasFile || false;
+      const runBody = { assistant_id: ASSISTANT_ID };
+      // If user sent a file, override tools to skip vector store search
+      // CARA reads the file text directly from the message instead
+      if (hasFile) {
+        runBody.tools = [];
+        console.log('Running without file_search (file text included in message)');
+      }
       const r = await fetch(`https://api.openai.com/v1/threads/${threadId}/runs`, {
         method: 'POST', headers: openaiHeaders,
-        body: JSON.stringify({ assistant_id: ASSISTANT_ID })
+        body: JSON.stringify(runBody)
       });
       return res.status(200).json(await r.json());
     }
