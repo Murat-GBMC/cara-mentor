@@ -391,28 +391,34 @@
       let status = run.status, runId = run.id;
 
       let pollCount = 0;
-      const maxPolls = 90; // 90 x 2s = 3 minutes max
-      let shownThinkingMsg = false;
+      const maxPolls = 90;
+      const startTime = Date.now();
       while ((status === 'queued' || status === 'in_progress') && pollCount < maxPolls) {
         await new Promise(r => setTimeout(r, 2000));
-        // Show "still reading" message after 20 seconds with a file
-        if (pollCount === 10 && !shownThinkingMsg) {
-          shownThinkingMsg = true;
-          const typingEl = document.getElementById('typingIndicator');
-          if (typingEl) {
-            const note = typingEl.querySelector('.typing-bubble');
-            if (note) note.innerHTML += '<span style="font-size:11px;color:#94a3b8;margin-left:8px;">Reading your file...</span>';
-          }
-        }
         try {
           const poll = await callBackend({action: 'getRunStatus', threadId, runId});
           status = poll.status;
+          const elapsed = Math.round((Date.now() - startTime) / 1000);
+          console.log(`Poll ${pollCount+1} | status: ${status} | ${elapsed}s elapsed`);
+          // Update typing indicator with elapsed time
+          const typingEl = document.getElementById('typingIndicator');
+          if (typingEl && elapsed > 5) {
+            const bubble = typingEl.querySelector('.typing-bubble');
+            if (bubble) {
+              let timeSpan = bubble.querySelector('.elapsed');
+              if (!timeSpan) {
+                timeSpan = document.createElement('span');
+                timeSpan.className = 'elapsed';
+                timeSpan.style.cssText = 'font-size:11px;color:#94a3b8;margin-left:8px;';
+                bubble.appendChild(timeSpan);
+              }
+              timeSpan.textContent = elapsed + 's...';
+            }
+          }
         } catch(e) {
           console.warn('Poll error:', e.message);
-          // Don't break on network error, keep trying
         }
         pollCount++;
-        console.log('Poll', pollCount, 'status:', status);
         if (['failed','cancelled','expired','requires_action'].includes(status)) break;
       }
       if (pollCount >= maxPolls) status = 'timeout';
@@ -611,28 +617,34 @@
       const run = await callBackend({action: 'runAssistant', threadId});
       let status = run.status, runId = run.id;
       let pollCount = 0;
-      const maxPolls = 90; // 90 x 2s = 3 minutes max
-      let shownThinkingMsg = false;
+      const maxPolls = 90;
+      const startTime = Date.now();
       while ((status === 'queued' || status === 'in_progress') && pollCount < maxPolls) {
         await new Promise(r => setTimeout(r, 2000));
-        // Show "still reading" message after 20 seconds with a file
-        if (pollCount === 10 && !shownThinkingMsg) {
-          shownThinkingMsg = true;
-          const typingEl = document.getElementById('typingIndicator');
-          if (typingEl) {
-            const note = typingEl.querySelector('.typing-bubble');
-            if (note) note.innerHTML += '<span style="font-size:11px;color:#94a3b8;margin-left:8px;">Reading your file...</span>';
-          }
-        }
         try {
           const poll = await callBackend({action: 'getRunStatus', threadId, runId});
           status = poll.status;
+          const elapsed = Math.round((Date.now() - startTime) / 1000);
+          console.log(`Poll ${pollCount+1} | status: ${status} | ${elapsed}s elapsed`);
+          // Update typing indicator with elapsed time
+          const typingEl = document.getElementById('typingIndicator');
+          if (typingEl && elapsed > 5) {
+            const bubble = typingEl.querySelector('.typing-bubble');
+            if (bubble) {
+              let timeSpan = bubble.querySelector('.elapsed');
+              if (!timeSpan) {
+                timeSpan = document.createElement('span');
+                timeSpan.className = 'elapsed';
+                timeSpan.style.cssText = 'font-size:11px;color:#94a3b8;margin-left:8px;';
+                bubble.appendChild(timeSpan);
+              }
+              timeSpan.textContent = elapsed + 's...';
+            }
+          }
         } catch(e) {
           console.warn('Poll error:', e.message);
-          // Don't break on network error, keep trying
         }
         pollCount++;
-        console.log('Poll', pollCount, 'status:', status);
         if (['failed','cancelled','expired','requires_action'].includes(status)) break;
       }
       if (pollCount >= maxPolls) status = 'timeout';
