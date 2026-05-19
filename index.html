@@ -331,6 +331,7 @@
   let threadId = null;
   let isWaiting = false;
   let currentLang = null;
+  const sessionId = 'sess_' + Math.random().toString(36).slice(2) + Date.now();
 
   async function callBackend(body) {
     const res = await fetch('/api/cara', {
@@ -387,7 +388,7 @@
         message: lang.systemPrompt + '\n\nPlease greet the user warmly in ' + name + ' and introduce yourself as CARA. Ask about their role (team member, project leader, PMO, or executive) and what they are working on. Keep it warm and concise.'
       });
 
-      const run = await callBackend({action: 'runAssistant', threadId});
+      const run = await callBackend({action: 'runAssistant', threadId, hasFile: messageHasFile});
       let status = run.status, runId = run.id;
 
       let pollCount = 0;
@@ -596,11 +597,13 @@
     try {
       // Extract file text if pending and include in message
       let finalMessage = text;
+      let messageHasFile = false;
       if (pendingFile) {
         try {
           console.log('Extracting file text...');
           const extracted = await extractFileText(pendingFile);
           finalMessage = text + '\n\n[User attached a file: ' + extracted.fileName + ']\n\nFile contents:\n' + extracted.text;
+          messageHasFile = true;
           console.log('File text extracted, total message length:', finalMessage.length);
           removeFile();
         } catch(err) {
@@ -614,7 +617,7 @@
         }
       }
       await callBackend({action: 'addMessage', threadId, message: finalMessage, sessionId: sessionId, language: currentLang});
-      const run = await callBackend({action: 'runAssistant', threadId});
+      const run = await callBackend({action: 'runAssistant', threadId, hasFile: messageHasFile});
       let status = run.status, runId = run.id;
       let pollCount = 0;
       const maxPolls = 90;
