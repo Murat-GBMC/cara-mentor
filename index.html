@@ -575,15 +575,15 @@
       let fileIdToSend = null;
       if (pendingFile && !pendingFileId) {
         try {
-          appendSystemNote('📎 Uploading file...');
+          console.log('Uploading file...');
           pendingFileId = await uploadFileToOpenAI(pendingFile);
           fileIdToSend = pendingFileId;
-          appendSystemNote('✅ File uploaded');
+          console.log('File uploaded successfully:', pendingFileId);
           removeFile();
         } catch(err) {
           console.error('File upload failed:', err);
           hideTyping();
-          appendMessage('cara', '⚠️ File upload error: ' + err.message + '. Check browser console for details.');
+          appendMessage('cara', 'I had trouble reading that file. Could you try again, or paste the key content directly into the chat?');
           isWaiting = false;
           document.getElementById('sendBtn').disabled = false;
           removeFile();
