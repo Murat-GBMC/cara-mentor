@@ -390,10 +390,19 @@
       const run = await callBackend({action: 'runAssistant', threadId});
       let status = run.status, runId = run.id;
 
-      while (status === 'queued' || status === 'in_progress') {
-        await new Promise(r => setTimeout(r, 1200));
+      let pollCount = 0;
+      const maxPolls = 40; // 40 x 1.5s = 60 seconds max
+      while ((status === 'queued' || status === 'in_progress') && pollCount < maxPolls) {
+        await new Promise(r => setTimeout(r, 1500));
         const poll = await callBackend({action: 'getRunStatus', threadId, runId});
         status = poll.status;
+        pollCount++;
+        console.log('Poll', pollCount, 'status:', status);
+        // Break early on terminal failure states
+        if (['failed','cancelled','expired','requires_action'].includes(status)) break;
+      }
+      if (pollCount >= maxPolls) {
+        status = 'timeout';
       }
 
       hideTyping();
@@ -596,17 +605,35 @@
       await callBackend({action: 'addMessage', threadId, message: text, fileId: fileIdToSend, sessionId: sessionId, language: currentLang});
       const run = await callBackend({action: 'runAssistant', threadId});
       let status = run.status, runId = run.id;
-      while (status === 'queued' || status === 'in_progress') {
-        await new Promise(r => setTimeout(r, 1200));
+      let pollCount = 0;
+      const maxPolls = 40; // 40 x 1.5s = 60 seconds max
+      while ((status === 'queued' || status === 'in_progress') && pollCount < maxPolls) {
+        await new Promise(r => setTimeout(r, 1500));
         const poll = await callBackend({action: 'getRunStatus', threadId, runId});
         status = poll.status;
+        pollCount++;
+        console.log('Poll', pollCount, 'status:', status);
+        // Break early on terminal failure states
+        if (['failed','cancelled','expired','requires_action'].includes(status)) break;
+      }
+      if (pollCount >= maxPolls) {
+        status = 'timeout';
       }
       if (status === 'completed') {
         const msgs = await callBackend({action: 'getMessages', threadId});
         const reply = msgs.data[0].content[0].text.value;
         hideTyping(); appendMessage('cara', reply);
+      } else if (status === 'timeout') {
+        hideTyping();
+        appendMessage('cara', 'This is taking longer than expected — likely due to the file size. Please try again with a shorter document, or paste the key content directly into the chat.');
       } else {
-        hideTyping(); appendMessage('cara', '...');
+        hideTyping();
+        const msg = status === 'failed'
+          ? 'I had trouble processing that file. The document may be too complex or in an unsupported format. Try a simpler PDF or paste the key content as text.'
+          : status === 'timeout'
+          ? 'This is taking longer than expected. Please try a smaller file or paste the key content directly into the chat.'
+          : 'Something went wrong. Please try again.';
+        appendMessage('cara', msg);
       }
     } catch(err) {
       hideTyping();
