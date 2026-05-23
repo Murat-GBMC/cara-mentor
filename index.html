@@ -388,7 +388,7 @@
         message: lang.systemPrompt + '\n\nPlease greet the user warmly in ' + name + ' and introduce yourself as CARA. Ask about their role (team member, project leader, PMO, or executive) and what they are working on. Keep it warm and concise.'
       });
 
-      const run = await callBackend({action: 'runAssistant', threadId, hasFile: messageHasFile});
+      const run = await callBackend({action: 'runAssistant', threadId, hasFile: false});
       let status = run.status, runId = run.id;
 
       let pollCount = 0;
@@ -401,7 +401,6 @@
           status = poll.status;
           const elapsed = Math.round((Date.now() - startTime) / 1000);
           console.log(`Poll ${pollCount+1} | status: ${status} | ${elapsed}s elapsed`);
-          // Update typing indicator with elapsed time
           const typingEl = document.getElementById('typingIndicator');
           if (typingEl && elapsed > 5) {
             const bubble = typingEl.querySelector('.typing-bubble');
@@ -427,11 +426,11 @@
       hideTyping();
 
       if (status === 'completed') {
-        const msgs = await callBackend({action: 'getMessages', threadId});
+        // ── PATCHED: pass empty question (greeting is a system message, not logged) ──
+        const msgs = await callBackend({action: 'getMessages', threadId, question: '', sessionId, language: currentLang});
         const reply = msgs.data[0].content[0].text.value;
         appendMessage('cara', reply);
       } else {
-        // Fallback to static greeting
         appendMessage('cara', lang.greeting);
       }
     } catch(err) {
@@ -442,7 +441,6 @@
   }
 
   function resetLanguage() {
-    // Reset everything and show language selector again
     threadId = null;
     isWaiting = false;
     currentLang = null;
@@ -536,14 +534,12 @@
   function handleFileSelect(event) {
     const file = event.target.files[0];
     if (!file) return;
-    // Validate file type
     const ext = '.' + file.name.split('.').pop().toLowerCase();
     if (!SUPPORTED_EXT.includes(ext)) {
       alert('Unsupported file type. Please upload: PDF, Word (.doc/.docx), PowerPoint (.pptx), text (.txt), CSV, or Markdown (.md) files.');
       document.getElementById('fileInput').value = '';
       return;
     }
-    // Validate file size (max 20MB)
     if (file.size > 20 * 1024 * 1024) {
       alert('File is too large. Maximum size is 20MB.');
       document.getElementById('fileInput').value = '';
@@ -595,7 +591,6 @@
     appendMessage('user', text);
     showTyping();
     try {
-      // Extract file text if pending and include in message
       let finalMessage = text;
       let messageHasFile = false;
       if (pendingFile) {
@@ -616,7 +611,7 @@
           return;
         }
       }
-      await callBackend({action: 'addMessage', threadId, message: finalMessage, sessionId: sessionId, language: currentLang});
+      await callBackend({action: 'addMessage', threadId, message: finalMessage, sessionId, language: currentLang});
       const run = await callBackend({action: 'runAssistant', threadId, hasFile: messageHasFile});
       let status = run.status, runId = run.id;
       let pollCount = 0;
@@ -629,7 +624,6 @@
           status = poll.status;
           const elapsed = Math.round((Date.now() - startTime) / 1000);
           console.log(`Poll ${pollCount+1} | status: ${status} | ${elapsed}s elapsed`);
-          // Update typing indicator with elapsed time
           const typingEl = document.getElementById('typingIndicator');
           if (typingEl && elapsed > 5) {
             const bubble = typingEl.querySelector('.typing-bubble');
@@ -652,7 +646,8 @@
       }
       if (pollCount >= maxPolls) status = 'timeout';
       if (status === 'completed') {
-        const msgs = await callBackend({action: 'getMessages', threadId});
+        // ── PATCHED: pass actual user question for single-row logging ──
+        const msgs = await callBackend({action: 'getMessages', threadId, question: text, sessionId, language: currentLang});
         const reply = msgs.data[0].content[0].text.value;
         hideTyping(); appendMessage('cara', reply);
       } else if (status === 'timeout') {
@@ -662,8 +657,6 @@
         hideTyping();
         const msg = status === 'failed'
           ? 'I had trouble processing that file. The document may be too complex or in an unsupported format. Try a simpler PDF or paste the key content as text.'
-          : status === 'timeout'
-          ? 'This is taking longer than expected. Please try a smaller file or paste the key content directly into the chat.'
           : 'Something went wrong. Please try again.';
         appendMessage('cara', msg);
       }
