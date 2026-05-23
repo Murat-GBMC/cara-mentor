@@ -216,17 +216,7 @@ export default async function handler(req, res) {
 
     // ── Add message ───────────────────────────────────────────────────────
     if (action === 'addMessage') {
-      const isSystemMsg = message && (
-        message.includes('MUST respond exclusively') ||
-        message.includes('يجب عليك الرد') ||
-        message.includes('Vous DEVEZ') ||
-        message.includes('ESCLUSIVAMENTE') ||
-        message.includes('仅使用中文')
-      );
-      if (!isSystemMsg && message) {
-        logToSheet(sessionId, language, message);
-      }
-
+      // Logging is handled in getMessages after CARA replies (single complete row)
       const msgBody = { role: 'user', content: message };
       const r = await fetch(`https://api.openai.com/v1/threads/${threadId}/messages`, {
         method: 'POST', headers: openaiHeaders, body: JSON.stringify(msgBody)
@@ -266,7 +256,7 @@ export default async function handler(req, res) {
       });
       const data = await r.json();
 
-      // Extract CARA's answer and log it to sheet
+      // Log one complete row: question (passed from frontend) + CARA's answer
       try {
         const assistantMsg = data?.data?.[0];
         if (assistantMsg?.role === 'assistant') {
@@ -275,9 +265,20 @@ export default async function handler(req, res) {
             .map(c => (c.text && c.text.value) ? c.text.value : '')
             .join(' ');
 
-          if (answerText) {
-            // Log answer row: question left blank (already logged in addMessage)
-            logToSheet(sessionId, language, '', answerText);
+          const userQuestion = body.question || '';
+
+          // Only log real user questions (skip system/language prompts)
+          const isSystemMsg = userQuestion && (
+            userQuestion.includes('MUST respond exclusively') ||
+            userQuestion.includes('يجب عليك الرد') ||
+            userQuestion.includes('Vous DEVEZ') ||
+            userQuestion.includes('ESCLUSIVAMENTE') ||
+            userQuestion.includes('仅使用中文') ||
+            userQuestion.includes('systemPrompt')
+          );
+
+          if (answerText && !isSystemMsg) {
+            logToSheet(sessionId, language, userQuestion, answerText);
           }
         }
       } catch (logErr) {
