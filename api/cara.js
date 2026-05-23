@@ -277,8 +277,9 @@ export default async function handler(req, res) {
             userQuestion.includes('systemPrompt')
           );
 
-          if (answerText && !isSystemMsg) {
-            logToSheet(sessionId, language, userQuestion, answerText);
+          // Only log when there is a real user question (skip greeting/system flows)
+          if (answerText && userQuestion && !isSystemMsg) {
+            await logToSheet(sessionId, language, userQuestion, answerText);
           }
         }
       } catch (logErr) {
