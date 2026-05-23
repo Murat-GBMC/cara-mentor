@@ -51,7 +51,7 @@ export default async function handler(req, res) {
     return (await r.json()).access_token;
   }
 
-  async function logToSheet(sid, lang, msg) {
+  async function logToSheet(sid, lang, msg, answer = '', answered = '') {
     try {
       if (!SHEET_ID || !CLIENT_EMAIL || !PRIVATE_KEY) {
         console.error('Sheet logging: missing env vars', { SHEET_ID: !!SHEET_ID, CLIENT_EMAIL: !!CLIENT_EMAIL, PRIVATE_KEY: !!PRIVATE_KEY });
@@ -59,12 +59,42 @@ export default async function handler(req, res) {
       }
       const token = await getGoogleToken();
       if (!token) { console.error('Sheet logging: failed to get token'); return; }
+
+      const responseLength = answer ? answer.length : '';
+
+      // Auto-detect if CARA answered or not
+      const unansweredPhrases = [
+        "i don't have information",
+        "i couldn't find",
+        "i don't know",
+        "i'm not sure",
+        "no information available",
+        "not covered in",
+        "outside the scope",
+        "i cannot find",
+        "i was unable to find",
+        "bu konuda bilgim yok",
+        "bulamadım",
+        "bilgi bulunamadı"
+      ];
+      const answeredFlag = answer
+        ? (unansweredPhrases.some(p => answer.toLowerCase().includes(p)) ? 'No' : 'Yes')
+        : '';
+
       const sheetRes = await fetch(
         `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/A1:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`,
         {
           method: 'POST',
           headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ values: [[new Date().toISOString(), sid || '', lang || '', msg]] })
+          body: JSON.stringify({ values: [[
+            new Date().toISOString(),  // Timestamp
+            sid || '',                 // Session ID
+            lang || '',                // Language
+            msg || '',                 // Question
+            answer || '',              // CARA's Answer
+            answeredFlag,              // Answered? (Yes/No)
+            responseLength             // Response Length (chars)
+          ]] })
         }
       );
       const sheetData = await sheetRes.json();
@@ -234,7 +264,27 @@ export default async function handler(req, res) {
       const r = await fetch(`https://api.openai.com/v1/threads/${threadId}/messages?limit=1`, {
         headers: openaiHeaders
       });
-      return res.status(200).json(await r.json());
+      const data = await r.json();
+
+      // Extract CARA's answer and log it to sheet
+      try {
+        const assistantMsg = data?.data?.[0];
+        if (assistantMsg?.role === 'assistant') {
+          const answerText = (assistantMsg.content || [])
+            .filter(c => c.type === 'text')
+            .map(c => (c.text && c.text.value) ? c.text.value : '')
+            .join(' ');
+
+          if (answerText) {
+            // Log answer row: question left blank (already logged in addMessage)
+            logToSheet(sessionId, language, '', answerText);
+          }
+        }
+      } catch (logErr) {
+        console.error('Answer log error:', logErr.message);
+      }
+
+      return res.status(200).json(data);
     }
 
     return res.status(400).json({ error: 'Unknown action' });
