@@ -11,6 +11,9 @@
 //   CARA_PROMPT_ID      (a pmpt_... ID if you saved CARA's instructions as a Prompt in the OpenAI dashboard)
 //   OPENAI_MODEL        (default: gpt-4o)
 // If CARA_PROMPT_ID is not set, CARA's instructions are read from api/instructions.js.
+//
+// v10.1: optional platform context (CoE vs PDU Circle) — the chat page sends
+//   platform: 'coe' | 'pdu' (from the iframe URL, e.g. ...vercel.app/?platform=pdu).
 
 import { CARA_INSTRUCTIONS } from './instructions.js';
 
@@ -40,6 +43,7 @@ export default async function handler(req, res) {
 
   const body = req.body || {};
   const { action, threadId, message, runId, language, sessionId } = body;
+  const platform = String(body.platform || '').toLowerCase();
 
   const openaiHeaders = {
     'Authorization': `Bearer ${OPENAI_API_KEY}`,
@@ -109,7 +113,18 @@ export default async function handler(req, res) {
         "i was unable to find",
         "bu konuda bilgim yok",
         "bulamadım",
-        "bilgi bulunamadı"
+        "bilgi bulunamadı",
+        "i don't have that specific information",
+        "isn't yet covered",
+        "not yet covered",
+        "not currently available in my knowledge base",
+        "please verify directly",
+        "verify the current requirement",
+        "bilgi tabanımda yer almıyor",
+        "bilgi tabanımda bulunmuyor",
+        "henüz bilgi tabanımda",
+        "bilgi tabanımda mevcut değil",
+        "henüz kapsanmıyor"
       ];
       const answeredFlag = answer
         ? (unansweredPhrases.some(p => answer.toLowerCase().includes(p)) ? 'No' : 'Yes')
@@ -127,7 +142,8 @@ export default async function handler(req, res) {
             msg || '',                 // Question
             answer || '',              // CARA's Answer
             answeredFlag,              // Answered? (Yes/No)
-            responseLength             // Response Length (chars)
+            responseLength,            // Response Length (chars)
+            platform || ''             // Platform (coe / pdu)
           ]] })
         }
       );
@@ -222,10 +238,16 @@ export default async function handler(req, res) {
       input: [{ role: 'user', content: userMessage }],
       store: true
     };
+    // Platform context from the chat page (V3 instructions use it to frame answers)
+    const PLATFORM_NAMES = { coe: 'Execution Capacity CoE', pdu: 'PDU Circle' };
+    const platformContext = PLATFORM_NAMES[platform]
+      ? `\n\n## PLATFORM CONTEXT\n\nThe user is using: ${PLATFORM_NAMES[platform]}. Use this environment without asking.`
+      : '';
     if (PROMPT_ID) {
       reqBody.prompt = { id: PROMPT_ID };
+      if (platformContext) reqBody.instructions = platformContext.trim();
     } else {
-      reqBody.instructions = CARA_INSTRUCTIONS;
+      reqBody.instructions = CARA_INSTRUCTIONS + platformContext;
     }
     // Same rule as v9: when the user attached a file, skip knowledge-base search
     if (!hasFile && VECTOR_STORE_ID) {
