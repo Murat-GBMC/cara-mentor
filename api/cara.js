@@ -1,3 +1,19 @@
+// CARA backend — v10 (Responses API + Conversations API)
+// Replaces the Assistants API version (retired by OpenAI on 26 Aug 2026).
+// The frontend (index.html) is unchanged: it still calls the same actions
+// createThread → addMessage → runAssistant → getRunStatus (poll) → getMessages.
+//
+// Required Vercel environment variables:
+//   OPENAI_API_KEY      (existing)
+//   VECTOR_STORE_ID     (NEW — the vs_... ID of CARA's knowledge base)
+//   GOOGLE_SHEET_ID, GOOGLE_CLIENT_EMAIL, GOOGLE_PRIVATE_KEY   (existing, for logging)
+// Optional:
+//   CARA_PROMPT_ID      (a pmpt_... ID if you saved CARA's instructions as a Prompt in the OpenAI dashboard)
+//   OPENAI_MODEL        (default: gpt-4o)
+// If CARA_PROMPT_ID is not set, CARA's instructions are read from api/instructions.js.
+
+import { CARA_INSTRUCTIONS } from './instructions.js';
+
 export const config = {
   api: {
     bodyParser: {
@@ -14,22 +30,41 @@ export default async function handler(req, res) {
   if (req.method === 'OPTIONS') return res.status(200).end();
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
-  const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
-  const ASSISTANT_ID   = process.env.ASSISTANT_ID;
-  const SHEET_ID       = process.env.GOOGLE_SHEET_ID;
-  const CLIENT_EMAIL   = process.env.GOOGLE_CLIENT_EMAIL;
-  const PRIVATE_KEY    = (process.env.GOOGLE_PRIVATE_KEY || '').replace(/\\n/g, '\n');
+  const OPENAI_API_KEY  = process.env.OPENAI_API_KEY;
+  const VECTOR_STORE_ID = process.env.VECTOR_STORE_ID;
+  const PROMPT_ID       = process.env.CARA_PROMPT_ID;
+  const MODEL           = process.env.OPENAI_MODEL || 'gpt-4o';
+  const SHEET_ID        = process.env.GOOGLE_SHEET_ID;
+  const CLIENT_EMAIL    = process.env.GOOGLE_CLIENT_EMAIL;
+  const PRIVATE_KEY     = (process.env.GOOGLE_PRIVATE_KEY || '').replace(/\\n/g, '\n');
 
-  const body = req.body;
+  const body = req.body || {};
   const { action, threadId, message, runId, language, sessionId } = body;
 
   const openaiHeaders = {
     'Authorization': `Bearer ${OPENAI_API_KEY}`,
-    'Content-Type': 'application/json',
-    'OpenAI-Beta': 'assistants=v2'
+    'Content-Type': 'application/json'
   };
 
-  // ── Google Sheets logging ───────────────────────────────────────────────
+  // ── OpenAI helper: throws with the real API error message so it shows in Vercel logs ──
+  async function openai(path, method = 'GET', payload) {
+    const r = await fetch(`https://api.openai.com/v1${path}`, {
+      method,
+      headers: openaiHeaders,
+      body: payload ? JSON.stringify(payload) : undefined
+    });
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok) {
+      const msg = data?.error?.message || `HTTP ${r.status}`;
+      console.error(`OpenAI ${method} ${path} failed:`, msg);
+      const err = new Error(msg);
+      err.status = r.status;
+      throw err;
+    }
+    return data;
+  }
+
+  // ── Google Sheets logging (unchanged from v9) ───────────────────────────
   async function getGoogleToken() {
     const now = Math.floor(Date.now() / 1000);
     const b64 = (obj) => Buffer.from(JSON.stringify(obj)).toString('base64url');
@@ -51,7 +86,7 @@ export default async function handler(req, res) {
     return (await r.json()).access_token;
   }
 
-  async function logToSheet(sid, lang, msg, answer = '', answered = '') {
+  async function logToSheet(sid, lang, msg, answer = '') {
     try {
       if (!SHEET_ID || !CLIENT_EMAIL || !PRIVATE_KEY) {
         console.error('Sheet logging: missing env vars', { SHEET_ID: !!SHEET_ID, CLIENT_EMAIL: !!CLIENT_EMAIL, PRIVATE_KEY: !!PRIVATE_KEY });
@@ -62,7 +97,6 @@ export default async function handler(req, res) {
 
       const responseLength = answer ? answer.length : '';
 
-      // Auto-detect if CARA answered or not
       const unansweredPhrases = [
         "i don't have information",
         "i couldn't find",
@@ -106,76 +140,51 @@ export default async function handler(req, res) {
     } catch (e) { console.error('Sheet log error:', e.message); }
   }
 
-  // ── Extract text from PDF using OpenAI vision ───────────────────────────
+  // ── File text extraction ────────────────────────────────────────────────
   async function extractTextFromFile(fileData, fileName, fileType) {
-    // For PDFs and docs, use OpenAI to extract/summarize the content
-    // Send as a message to a temporary chat completion
     const base64 = fileData;
-    
+
     if (fileType === 'application/pdf') {
-      // Use GPT-4o to read the PDF
-      const extractRes = await fetch('https://api.openai.com/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${OPENAI_API_KEY}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          model: 'gpt-4o',
-          max_tokens: 4000,
-          messages: [{
-            role: 'user',
-            content: [
-              {
-                type: 'text',
-                text: 'Please extract and return ALL the text content from this document. Return the text as-is, preserving structure. Do not summarize - return the actual content.'
-              },
-              {
-                type: 'image_url',
-                image_url: {
-                  url: `data:application/pdf;base64,${base64}`,
-                  detail: 'high'
-                }
-              }
-            ]
-          }]
-        })
+      // Responses API reads PDFs natively via input_file
+      const data = await openai('/responses', 'POST', {
+        model: MODEL,
+        max_output_tokens: 4000,
+        input: [{
+          role: 'user',
+          content: [
+            { type: 'input_file', filename: fileName || 'document.pdf', file_data: `data:application/pdf;base64,${base64}` },
+            { type: 'input_text', text: 'Please extract and return ALL the text content from this document. Return the text as-is, preserving structure. Do not summarize - return the actual content.' }
+          ]
+        }]
       });
-      const extractData = await extractRes.json();
-      return extractData.choices?.[0]?.message?.content || null;
-    }
-    
-    // For Word docs and text files, decode directly
-    if (fileType === 'text/plain' || fileType === 'text/markdown' || fileType === 'text/csv') {
-      const buffer = Buffer.from(base64, 'base64');
-      return buffer.toString('utf-8').slice(0, 15000); // limit to 15k chars
+      return outputText(data) || null;
     }
 
-    // For Word docs - extract raw text from XML
-    if (fileType === 'application/msword' || 
+    if (fileType === 'text/plain' || fileType === 'text/markdown' || fileType === 'text/csv') {
+      const buffer = Buffer.from(base64, 'base64');
+      return buffer.toString('utf-8').slice(0, 15000);
+    }
+
+    if (fileType === 'application/msword' ||
         fileType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
       try {
         const buffer = Buffer.from(base64, 'base64');
-        // Try to extract readable text - look for text patterns
         const str = buffer.toString('utf-8', 0, Math.min(buffer.length, 500000));
-        // Extract text between XML tags for docx
         const textMatches = str.match(/<w:t[^>]*>([^<]+)<\/w:t>/g) || [];
         if (textMatches.length > 0) {
-          const text = textMatches
+          return textMatches
             .map(m => m.replace(/<[^>]+>/g, ''))
             .join(' ')
             .replace(/\s+/g, ' ')
             .trim()
             .slice(0, 15000);
-          return text;
         }
-        // Fallback: extract any readable ASCII text
         const readable = str.replace(/[^\x20-\x7E\n\r\t]/g, ' ')
           .replace(/\s+/g, ' ')
           .trim()
           .slice(0, 8000);
         return readable.length > 100 ? readable : null;
-      } catch(e) {
+      } catch (e) {
         console.error('Word extraction error:', e.message);
         return null;
       }
@@ -184,115 +193,148 @@ export default async function handler(req, res) {
     return null;
   }
 
+  // ── Helpers for Responses API output ────────────────────────────────────
+  function outputText(resp) {
+    const parts = [];
+    for (const item of resp?.output || []) {
+      if (item.type === 'message' && item.role === 'assistant') {
+        for (const c of item.content || []) {
+          if (c.type === 'output_text' && c.text) parts.push(c.text);
+        }
+      }
+    }
+    // Strip any leftover citation markers like 【4:0†source】
+    return parts.join('\n\n').replace(/【[^】]*】/g, '').trim();
+  }
+
+  // Map Responses statuses to the Assistants run statuses the frontend expects
+  function mapStatus(s) {
+    if (s === 'queued' || s === 'in_progress' || s === 'completed' || s === 'failed' || s === 'cancelled') return s;
+    if (s === 'incomplete') return 'completed'; // partial answer (e.g. token limit) — still show it
+    return 'failed';
+  }
+
+  function buildRequest(userMessage) {
+    const hasFile = userMessage.includes('[User attached a file:');
+    const reqBody = {
+      model: MODEL,
+      conversation: threadId,
+      input: [{ role: 'user', content: userMessage }],
+      store: true
+    };
+    if (PROMPT_ID) {
+      reqBody.prompt = { id: PROMPT_ID };
+    } else {
+      reqBody.instructions = CARA_INSTRUCTIONS;
+    }
+    // Same rule as v9: when the user attached a file, skip knowledge-base search
+    if (!hasFile && VECTOR_STORE_ID) {
+      reqBody.tools = [{ type: 'file_search', vector_store_ids: [VECTOR_STORE_ID] }];
+    } else if (!VECTOR_STORE_ID) {
+      console.error('VECTOR_STORE_ID is not set — CARA is answering without her knowledge base');
+    }
+    return reqBody;
+  }
+
+  async function setPending(responseId) {
+    await openai(`/conversations/${threadId}`, 'POST', { metadata: { last_response: responseId } });
+  }
+
+  async function getPending() {
+    const conv = await openai(`/conversations/${threadId}`);
+    return conv?.metadata?.last_response || null;
+  }
+
   try {
 
-    // ── Create thread ─────────────────────────────────────────────────────
+    // ── Create thread → create conversation ──────────────────────────────
     if (action === 'createThread') {
-      const r = await fetch('https://api.openai.com/v1/threads', {
-        method: 'POST', headers: openaiHeaders, body: JSON.stringify({})
-      });
-      return res.status(200).json(await r.json());
+      const conv = await openai('/conversations', 'POST', {});
+      return res.status(200).json({ id: conv.id });
     }
 
-    // ── Extract file text (new approach - no file attachment) ─────────────
+    // ── Extract file text ─────────────────────────────────────────────────
     if (action === 'extractFile') {
       const { fileData, fileName, fileType } = body;
       if (!fileData || !fileName) return res.status(400).json({ error: 'Missing file data' });
 
       console.log('Extracting text from:', fileName, 'type:', fileType);
-      
       const extractedText = await extractTextFromFile(fileData, fileName, fileType);
-      
-      if (!extractedText || extractedText.length < 50) {
-        return res.status(200).json({ 
-          success: false, 
-          error: 'Could not extract readable text from this file' 
-        });
-      }
 
+      if (!extractedText || extractedText.length < 50) {
+        return res.status(200).json({ success: false, error: 'Could not extract readable text from this file' });
+      }
       console.log('Extracted', extractedText.length, 'characters from', fileName);
       return res.status(200).json({ success: true, text: extractedText, fileName });
     }
 
-    // ── Add message ───────────────────────────────────────────────────────
+    // ── Add message → start the response (in background) ─────────────────
     if (action === 'addMessage') {
-      // Logging is handled in getMessages after CARA replies (single complete row)
-      const msgBody = { role: 'user', content: message };
-      const r = await fetch(`https://api.openai.com/v1/threads/${threadId}/messages`, {
-        method: 'POST', headers: openaiHeaders, body: JSON.stringify(msgBody)
-      });
-      return res.status(200).json(await r.json());
-    }
+      if (!threadId || !message) return res.status(400).json({ error: 'Missing threadId or message' });
+      const reqBody = buildRequest(message);
 
-    // ── Run assistant ─────────────────────────────────────────────────────
-    if (action === 'runAssistant') {
-      const hasFile = body.hasFile || false;
-      const runBody = { assistant_id: ASSISTANT_ID };
-      // If user sent a file, override tools to skip vector store search
-      // CARA reads the file text directly from the message instead
-      if (hasFile) {
-        runBody.tools = [];
-        console.log('Running without file_search (file text included in message)');
-      }
-      const r = await fetch(`https://api.openai.com/v1/threads/${threadId}/runs`, {
-        method: 'POST', headers: openaiHeaders,
-        body: JSON.stringify(runBody)
-      });
-      return res.status(200).json(await r.json());
-    }
-
-    // ── Poll run status ───────────────────────────────────────────────────
-    if (action === 'getRunStatus') {
-      const r = await fetch(`https://api.openai.com/v1/threads/${threadId}/runs/${runId}`, {
-        headers: openaiHeaders
-      });
-      return res.status(200).json(await r.json());
-    }
-
-    // ── Get messages ──────────────────────────────────────────────────────
-    if (action === 'getMessages') {
-      const r = await fetch(`https://api.openai.com/v1/threads/${threadId}/messages?limit=1`, {
-        headers: openaiHeaders
-      });
-      const data = await r.json();
-
-      // Log one complete row: question (passed from frontend) + CARA's answer
+      let resp;
       try {
-        const assistantMsg = data?.data?.[0];
-        if (assistantMsg?.role === 'assistant') {
-          const answerText = (assistantMsg.content || [])
-            .filter(c => c.type === 'text')
-            .map(c => (c.text && c.text.value) ? c.text.value : '')
-            .join(' ');
-
-          const userQuestion = body.question || '';
-
-          // Only log real user questions (skip system/language prompts)
-          const isSystemMsg = userQuestion && (
-            userQuestion.includes('MUST respond exclusively') ||
-            userQuestion.includes('يجب عليك الرد') ||
-            userQuestion.includes('Vous DEVEZ') ||
-            userQuestion.includes('ESCLUSIVAMENTE') ||
-            userQuestion.includes('仅使用中文') ||
-            userQuestion.includes('systemPrompt')
-          );
-
-          // Only log when there is a real user question (skip greeting/system flows)
-          if (answerText && userQuestion && !isSystemMsg) {
-            await logToSheet(sessionId, language, userQuestion, answerText);
-          }
+        resp = await openai('/responses', 'POST', { ...reqBody, background: true });
+      } catch (e) {
+        // Fallback: if background mode is rejected, run synchronously
+        if (/background/i.test(e.message)) {
+          console.warn('Background mode rejected, running synchronously:', e.message);
+          resp = await openai('/responses', 'POST', reqBody);
+        } else {
+          throw e;
         }
-      } catch (logErr) {
-        console.error('Answer log error:', logErr.message);
+      }
+      await setPending(resp.id);
+      return res.status(200).json({ id: resp.id, status: resp.status });
+    }
+
+    // ── Run assistant → return the response started in addMessage ────────
+    if (action === 'runAssistant') {
+      const pendingId = await getPending();
+      if (!pendingId) return res.status(200).json({ id: null, status: 'failed', error: 'No pending response' });
+      const resp = await openai(`/responses/${pendingId}`);
+      return res.status(200).json({ id: resp.id, status: mapStatus(resp.status) });
+    }
+
+    // ── Poll status ───────────────────────────────────────────────────────
+    if (action === 'getRunStatus') {
+      const resp = await openai(`/responses/${runId}`);
+      if (resp.status === 'failed') console.error('Response failed:', JSON.stringify(resp.error));
+      return res.status(200).json({ id: resp.id, status: mapStatus(resp.status) });
+    }
+
+    // ── Get the answer (returned in the same shape the frontend expects) ──
+    if (action === 'getMessages') {
+      const pendingId = await getPending();
+      const resp = await openai(`/responses/${pendingId}`);
+      const answerText = outputText(resp);
+
+      const userQuestion = body.question || '';
+      const isSystemMsg = userQuestion && (
+        userQuestion.includes('MUST respond exclusively') ||
+        userQuestion.includes('يجب عليك الرد') ||
+        userQuestion.includes('Vous DEVEZ') ||
+        userQuestion.includes('ESCLUSIVAMENTE') ||
+        userQuestion.includes('仅使用中文') ||
+        userQuestion.includes('systemPrompt')
+      );
+      if (answerText && userQuestion && !isSystemMsg) {
+        await logToSheet(sessionId, language, userQuestion, answerText);
       }
 
-      return res.status(200).json(data);
+      return res.status(200).json({
+        data: [{
+          role: 'assistant',
+          content: [{ type: 'text', text: { value: answerText || 'Sorry — I could not generate an answer. Please try again.' } }]
+        }]
+      });
     }
 
     return res.status(400).json({ error: 'Unknown action' });
 
   } catch (err) {
     console.error('Handler error:', err);
-    return res.status(500).json({ error: err.message || 'Server error' });
+    return res.status(500).json({ error: err.message || 'Server error', status: 'failed' });
   }
 }
