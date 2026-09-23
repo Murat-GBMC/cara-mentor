@@ -333,7 +333,11 @@
   let currentLang = null;
   const sessionId = 'sess_' + Math.random().toString(36).slice(2) + Date.now();
 
+  // Platform context: embed as ...vercel.app/?platform=coe or ?platform=pdu
+  const CARA_PLATFORM = (new URLSearchParams(window.location.search).get('platform') || '').toLowerCase();
+
   async function callBackend(body) {
+    body.platform = CARA_PLATFORM;
     const res = await fetch('/api/cara', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
