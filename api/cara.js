@@ -219,8 +219,14 @@ export default async function handler(req, res) {
         }
       }
     }
-    // Strip any leftover citation markers like 【4:0†source】
-    return parts.join('\n\n').replace(/【[^】]*】/g, '').trim();
+    // Strip citation markers: 【4:0†source】 (older models) and filecite…turn0file6 (newer models)
+    return parts.join('\n\n')
+      .replace(/【[^】]*】/g, '')
+      .replace(/\uE200[^\uE201]*\uE201/g, '')
+      .replace(/\s*filecite(?:\s*turn\d+file\d+)+/g, '')
+      .replace(/[\uE000-\uF8FF]/g, '')
+      .replace(/[ \t]+([.,;:!?])/g, '$1')
+      .trim();
   }
 
   // Map Responses statuses to the Assistants run statuses the frontend expects
