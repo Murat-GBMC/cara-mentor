@@ -213,5 +213,3 @@ Kısa ve uygulanabilir bir Toplantı İyileştirme Raporu hazırla.
     return json(res,500,{error:err.message||'Beklenmeyen hata'});
   }
 }
-
-Explain
