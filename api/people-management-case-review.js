@@ -99,9 +99,15 @@ export default async function handler(req, res) {
       }
     }
 
+    // file_search kaynak işaretlerini temizle (ör. "fileciteturn0file12turn0file5").
+    // Sıra önemli: önce özel işaretli blok, sonra düz "filecite..." metni,
+    // en son kalan görünmez karakterler.
     return parts
       .join('\n\n')
       .replace(/【[^】]*】/g, '')
+      .replace(/\uE200[^\uE201]*\uE201/g, '')
+      .replace(/\s*(?:file|nav|web)?cite(?:\s*turn\d+[a-z]+\d+)+/gi, '')
+      .replace(/\s*turn\d+(?:file|search|view|news|fetch)\d+/gi, '')
       .replace(/[\uE000-\uF8FF]/g, '')
       .trim();
   }
