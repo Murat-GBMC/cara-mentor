@@ -81,6 +81,9 @@ MEETING CLINIC KURALLARI:
 - Nihai değerlendirmede kullanıcının güçlü teşhislerini ve gözden kaçırdığı noktaları ayır.
 - Kullanıcının yaklaşımını kopyalamak yerine onu uygulanabilir toplantı tasarımına dönüştür.
 - Mentor notu en fazla 3 cümle olsun.
+- TÜM kullanıcıya gösterilen metinleri Türkçe üret. Kişi unvanlarını, toplantı türlerini ve yönetim terimlerini mümkün olduğunca Türkçeleştir.
+- Örnek terminoloji: Operations Director → Operasyon Direktörü; Quality Manager → Kalite Yöneticisi; Marketing Director → Pazarlama Direktörü; Product Owner → Ürün Sahibi; Steering Committee → Yönlendirme Komitesi; Executive Review → Üst Yönetim Değerlendirme Toplantısı; decision meeting → karar toplantısı; discussion meeting → tartışma toplantısı.
+- Daily stand-up gibi sektörde yaygın İngilizce terimler gerekiyorsa ilk kullanımda Türkçe karşılığıyla birlikte ver; sonraki kullanımlarda Türkçe karşılığını tercih et.
 `;
 
 const followupSchema = {
@@ -210,3 +213,5 @@ Kısa ve uygulanabilir bir Toplantı İyileştirme Raporu hazırla.
     return json(res,500,{error:err.message||'Beklenmeyen hata'});
   }
 }
+
+Explain
