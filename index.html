@@ -160,6 +160,9 @@
   .file-remove:hover { color:#e53e3e; }
   #fileInput { display:none; }
 
+  .quota-note { display:none;text-align:center;font-size:11.5px;color:var(--teal-dark);background:var(--teal-lighter);border-top:1px solid var(--border);padding:7px 16px;font-weight:500; }
+  .quota-note.rtl { direction:rtl; }
+  textarea:disabled { cursor:not-allowed; }
   .footer-note { text-align:center;font-size:11px;color:var(--text-light);padding:10px 20px;background:#fff;border-top:1px solid var(--border); }
   .footer-note span { color:var(--teal-dark);font-weight:600; }
   .bubble strong { color:var(--teal-dark);font-weight:600; }
@@ -246,9 +249,11 @@
     <button class="suggestion-btn" id="sug4" onclick="sendSuggestion(this)"></button>
   </div>
 
+  <div class="quota-note" id="quotaNote"></div>
+
   <input type="file" id="fileInput" accept=".pdf,.doc,.docx,.txt,.pptx,.md,.csv" onchange="handleFileSelect(event)">
   <div class="input-area">
-    <button class="attach-btn" onclick="document.getElementById('fileInput').click()" title="Attach file">
+    <button class="attach-btn" id="attachBtn" onclick="document.getElementById('fileInput').click()" title="Attach file">
       <svg viewBox="0 0 24 24"><path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"/></svg>
     </button>
     <div class="input-wrap">
@@ -328,6 +333,85 @@
     }
   };
 
+  // ── Fair-use limit texts (v11) ──
+  const QUOTA_TEXT = {
+    en: {
+      limit: d => `You've reached this month's CARA usage allowance. It renews on **${d}**. For urgent needs, please contact GBMC.`,
+      warn: (p, d) => `Monthly CARA usage: ${p}% · renews ${d}`,
+      rate: 'You\'re sending messages very quickly — please wait a minute and try again.',
+      unverified: 'CARA couldn\'t verify your account. Please open CARA from within the GBMC learning platform.'
+    },
+    tr: {
+      limit: d => `Bu ayki CARA kullanım hakkınızı doldurdunuz. Hakkınız **${d}** tarihinde yenilenecek. Acil bir ihtiyacınız varsa lütfen GBMC ile iletişime geçin.`,
+      warn: (p, d) => `Aylık CARA kullanımınız: %${p} · Yenilenme: ${d}`,
+      rate: 'Çok hızlı mesaj gönderiyorsunuz — lütfen bir dakika bekleyip tekrar deneyin.',
+      unverified: 'Hesabınız doğrulanamadı. Lütfen CARA\'yı GBMC öğrenme platformu üzerinden açın.'
+    },
+    fr: {
+      limit: d => `Vous avez atteint votre quota mensuel d'utilisation de CARA. Il sera renouvelé le **${d}**. Pour un besoin urgent, veuillez contacter GBMC.`,
+      warn: (p, d) => `Utilisation mensuelle de CARA : ${p} % · renouvellement le ${d}`,
+      rate: 'Vous envoyez des messages très rapidement — veuillez patienter une minute puis réessayer.',
+      unverified: 'Votre compte n\'a pas pu être vérifié. Veuillez ouvrir CARA depuis la plateforme d\'apprentissage GBMC.'
+    },
+    it: {
+      limit: d => `Hai raggiunto il limite mensile di utilizzo di CARA. Si rinnoverà il **${d}**. Per esigenze urgenti, contatta GBMC.`,
+      warn: (p, d) => `Utilizzo mensile di CARA: ${p}% · rinnovo il ${d}`,
+      rate: 'Stai inviando messaggi molto rapidamente — attendi un minuto e riprova.',
+      unverified: 'Non è stato possibile verificare il tuo account. Apri CARA dalla piattaforma di apprendimento GBMC.'
+    },
+    zh: {
+      limit: d => `您本月的CARA使用额度已用完，将于**${d}**恢复。如有紧急需求，请联系GBMC。`,
+      warn: (p, d) => `本月CARA使用量：${p}% · ${d}恢复`,
+      rate: '您发送消息的速度过快，请等待一分钟后再试。',
+      unverified: '无法验证您的账户。请通过GBMC学习平台打开CARA。'
+    },
+    ar: {
+      limit: d => `لقد استنفدت حصتك الشهرية من استخدام كارا. سيتم تجديدها في **${d}**. للاحتياجات العاجلة، يرجى التواصل مع GBMC.`,
+      warn: (p, d) => `استخدامك الشهري لكارا: ${p}% · يتجدد في ${d}`,
+      rate: 'أنت ترسل الرسائل بسرعة كبيرة — يرجى الانتظار دقيقة ثم المحاولة مرة أخرى.',
+      unverified: 'تعذّر التحقق من حسابك. يرجى فتح كارا من منصة GBMC التعليمية.'
+    }
+  };
+  const DATE_LOCALES = { en: 'en-GB', tr: 'tr-TR', fr: 'fr-FR', it: 'it-IT', zh: 'zh-CN', ar: 'ar' };
+  let quotaLocked = false;
+
+  function formatResetDate(q) {
+    try {
+      return new Date(q.resetAt).toLocaleDateString(DATE_LOCALES[currentLang] || 'en-GB',
+        { day: 'numeric', month: 'long', timeZone: 'Europe/Istanbul' });
+    } catch (e) { return ''; }
+  }
+
+  function setChatLocked(locked) {
+    quotaLocked = locked;
+    document.getElementById('userInput').disabled = locked;
+    document.getElementById('sendBtn').disabled = locked;
+    document.getElementById('attachBtn').disabled = locked;
+    if (locked) document.getElementById('suggestions').style.display = 'none';
+  }
+
+  // Shows the usage note / limit message. Returns true if the request was blocked.
+  function applyQuota(q) {
+    const note = document.getElementById('quotaNote');
+    if (!q || !q.enabled) { note.style.display = 'none'; return false; }
+    const T = QUOTA_TEXT[currentLang] || QUOTA_TEXT.en;
+    note.classList.toggle('rtl', currentLang === 'ar');
+    if (q.blocked) {
+      if (q.reason === 'rate') { appendMessage('cara', T.rate); return true; }
+      appendMessage('cara', (q.reason === 'unverified' || q.reason === 'no_user') ? T.unverified : T.limit(formatResetDate(q)));
+      note.style.display = 'none';
+      setChatLocked(true);
+      return true;
+    }
+    if (q.warn) {
+      note.textContent = T.warn(q.pct, formatResetDate(q));
+      note.style.display = 'block';
+    } else {
+      note.style.display = 'none';
+    }
+    return false;
+  }
+
   let threadId = null;
   let isWaiting = false;
   let currentLang = null;
@@ -335,9 +419,12 @@
 
   // Platform context: embed as ...vercel.app/?platform=coe or ?platform=pdu
   const CARA_PLATFORM = (new URLSearchParams(window.location.search).get('platform') || '').toLowerCase();
+  // User identity for fair-use limits: embed as ...vercel.app/?platform=coe&uid=<LearnWorlds user id>
+  const CARA_UID = (new URLSearchParams(window.location.search).get('uid') || '').trim();
 
   async function callBackend(body) {
     body.platform = CARA_PLATFORM;
+    body.uid = CARA_UID;
     const res = await fetch('/api/cara', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
@@ -383,14 +470,22 @@
     try {
       // Create thread
       const thread = await callBackend({action: 'createThread'});
+      if (thread.quota && thread.quota.blocked) { hideTyping(); applyQuota(thread.quota); return; }
       threadId = thread.id;
 
       // Send silent language instruction + greeting request
-      await callBackend({
+      const greet = await callBackend({
         action: 'addMessage',
         threadId,
+        greeting: true,
         message: lang.systemPrompt + '\n\nPlease greet the user warmly in ' + name + ' and introduce yourself as CARA. Ask about their role (team member, project leader, PMO, or executive) and what they are working on. Keep it warm and concise.'
       });
+      if (greet.status === 'limit_reached') {
+        hideTyping();
+        if (greet.quota && greet.quota.reason === 'rate') appendMessage('cara', lang.greeting);
+        else applyQuota(greet.quota);
+        return;
+      }
 
       const run = await callBackend({action: 'runAssistant', threadId, hasFile: false});
       let status = run.status, runId = run.id;
@@ -434,6 +529,7 @@
         const msgs = await callBackend({action: 'getMessages', threadId, question: '', sessionId, language: currentLang});
         const reply = msgs.data[0].content[0].text.value;
         appendMessage('cara', reply);
+        applyQuota(msgs.quota);
       } else {
         appendMessage('cara', lang.greeting);
       }
@@ -448,6 +544,8 @@
     threadId = null;
     isWaiting = false;
     currentLang = null;
+    setChatLocked(false);
+    document.getElementById('quotaNote').style.display = 'none';
     document.getElementById('chatArea').innerHTML = '';
     document.getElementById('chatArea').classList.remove('rtl');
     document.getElementById('userInput').style.direction = 'ltr';
@@ -575,6 +673,7 @@
           });
           clearTimeout(timeout);
           if (result.success && result.text) resolve({ text: result.text, fileName: result.fileName });
+          else if (result.limited) { const err = new Error('limit'); err.quota = result.quota; reject(err); }
           else reject(new Error(result.error || 'Could not extract text from file'));
         } catch(err) { clearTimeout(timeout); reject(err); }
       };
@@ -584,7 +683,7 @@
   }
 
   async function sendMessage() {
-    if (isWaiting) return;
+    if (isWaiting || quotaLocked) return;
     const input = document.getElementById('userInput');
     const text = input.value.trim();
     if (!text) return;
@@ -608,14 +707,25 @@
         } catch(err) {
           console.error('File extraction failed:', err);
           hideTyping();
-          appendMessage('cara', 'I had trouble reading that file. Please try a PDF or plain text file, or paste the content directly into the chat.');
+          if (err.quota) {
+            applyQuota(err.quota);
+            if (err.quota.reason === 'rate') { input.value = text; return finishSend(); }
+          } else {
+            appendMessage('cara', 'I had trouble reading that file. Please try a PDF or plain text file, or paste the content directly into the chat.');
+          }
           isWaiting = false;
-          document.getElementById('sendBtn').disabled = false;
+          document.getElementById('sendBtn').disabled = quotaLocked;
           removeFile();
           return;
         }
       }
-      await callBackend({action: 'addMessage', threadId, message: finalMessage, sessionId, language: currentLang});
+      const added = await callBackend({action: 'addMessage', threadId, message: finalMessage, sessionId, language: currentLang});
+      if (added.status === 'limit_reached') {
+        hideTyping();
+        applyQuota(added.quota);
+        if (added.quota && added.quota.reason === 'rate') input.value = text; // let them resend
+        return finishSend();
+      }
       const run = await callBackend({action: 'runAssistant', threadId, hasFile: messageHasFile});
       let status = run.status, runId = run.id;
       let pollCount = 0;
@@ -654,6 +764,7 @@
         const msgs = await callBackend({action: 'getMessages', threadId, question: text, sessionId, language: currentLang});
         const reply = msgs.data[0].content[0].text.value;
         hideTyping(); appendMessage('cara', reply);
+        applyQuota(msgs.quota);
       } else if (status === 'timeout') {
         hideTyping();
         appendMessage('cara', 'This is taking longer than expected — likely due to the file size. Please try again with a shorter document, or paste the key content directly into the chat.');
@@ -669,9 +780,13 @@
       appendMessage('cara', '...');
       console.error(err);
     }
+    finishSend();
+  }
+
+  function finishSend() {
     isWaiting = false;
-    document.getElementById('sendBtn').disabled = false;
-    input.focus();
+    document.getElementById('sendBtn').disabled = quotaLocked;
+    if (!quotaLocked) document.getElementById('userInput').focus();
   }
 </script>
 </body>
