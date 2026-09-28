@@ -14,8 +14,13 @@
 //
 // v10.1: optional platform context (CoE vs PDU Circle) — the chat page sends
 //   platform: 'coe' | 'pdu' (from the iframe URL, e.g. ...vercel.app/?platform=pdu).
+//
+// v11: monthly fair-use limits per user (see api/_lib/quota.js and QUOTA_SETUP.md).
+//   The chat page sends uid (LearnWorlds user id, from ...vercel.app/?platform=coe&uid=...).
+//   Needs UPSTASH_REDIS_REST_URL + UPSTASH_REDIS_REST_TOKEN; without them CARA runs unlimited.
 
 import { CARA_INSTRUCTIONS } from './instructions.js';
+import { checkQuota, recordTokens } from './_lib/quota.js';
 
 export const config = {
   api: {
@@ -90,7 +95,7 @@ export default async function handler(req, res) {
     return (await r.json()).access_token;
   }
 
-  async function logToSheet(sid, lang, msg, answer = '') {
+  async function logToSheet(sid, lang, msg, answer = '', extra = {}) {
     try {
       if (!SHEET_ID || !CLIENT_EMAIL || !PRIVATE_KEY) {
         console.error('Sheet logging: missing env vars', { SHEET_ID: !!SHEET_ID, CLIENT_EMAIL: !!CLIENT_EMAIL, PRIVATE_KEY: !!PRIVATE_KEY });
@@ -143,7 +148,9 @@ export default async function handler(req, res) {
             answer || '',              // CARA's Answer
             answeredFlag,              // Answered? (Yes/No)
             responseLength,            // Response Length (chars)
-            platform || ''             // Platform (coe / pdu)
+            platform || '',            // Platform (coe / pdu)
+            extra.uid || '',           // User (LearnWorlds id)
+            extra.tokens || ''         // Tokens used by this answer
           ]] })
         }
       );
@@ -157,6 +164,7 @@ export default async function handler(req, res) {
   }
 
   // ── File text extraction ────────────────────────────────────────────────
+  let extractionTokens = 0, extractionId = null;
   async function extractTextFromFile(fileData, fileName, fileType) {
     const base64 = fileData;
 
@@ -173,6 +181,8 @@ export default async function handler(req, res) {
           ]
         }]
       });
+      extractionTokens = data?.usage?.total_tokens || 0;
+      extractionId = data?.id || null;
       return outputText(data) || null;
     }
 
@@ -277,8 +287,10 @@ export default async function handler(req, res) {
 
     // ── Create thread → create conversation ──────────────────────────────
     if (action === 'createThread') {
+      const quota = await checkQuota(req, body, platform);
+      if (quota.blocked) return res.status(200).json({ id: null, quota });
       const conv = await openai('/conversations', 'POST', {});
-      return res.status(200).json({ id: conv.id });
+      return res.status(200).json({ id: conv.id, quota });
     }
 
     // ── Extract file text ─────────────────────────────────────────────────
@@ -286,8 +298,12 @@ export default async function handler(req, res) {
       const { fileData, fileName, fileType } = body;
       if (!fileData || !fileName) return res.status(400).json({ error: 'Missing file data' });
 
+      const quota = await checkQuota(req, body, platform, { rate: true });
+      if (quota.blocked) return res.status(200).json({ success: false, limited: true, quota });
+
       console.log('Extracting text from:', fileName, 'type:', fileType);
       const extractedText = await extractTextFromFile(fileData, fileName, fileType);
+      if (extractionTokens) await recordTokens(req, body, extractionTokens, extractionId);
 
       if (!extractedText || extractedText.length < 50) {
         return res.status(200).json({ success: false, error: 'Could not extract readable text from this file' });
@@ -299,6 +315,11 @@ export default async function handler(req, res) {
     // ── Add message → start the response (in background) ─────────────────
     if (action === 'addMessage') {
       if (!threadId || !message) return res.status(400).json({ error: 'Missing threadId or message' });
+
+      // The hidden greeting request does not use up a message (its tokens still count)
+      const quota = await checkQuota(req, body, platform, { rate: true, countMessage: body.greeting !== true });
+      if (quota.blocked) return res.status(200).json({ id: null, status: 'limit_reached', quota });
+
       const reqBody = buildRequest(message);
 
       let resp;
@@ -314,7 +335,7 @@ export default async function handler(req, res) {
         }
       }
       await setPending(resp.id);
-      return res.status(200).json({ id: resp.id, status: resp.status });
+      return res.status(200).json({ id: resp.id, status: resp.status, quota });
     }
 
     // ── Run assistant → return the response started in addMessage ────────
@@ -337,6 +358,9 @@ export default async function handler(req, res) {
       const pendingId = await getPending();
       const resp = await openai(`/responses/${pendingId}`);
       const answerText = outputText(resp);
+      const tokens = resp?.usage?.total_tokens || 0;
+      await recordTokens(req, body, tokens, resp.id);
+      const quota = await checkQuota(req, body, platform);
 
       const userQuestion = body.question || '';
       const isSystemMsg = userQuestion && (
@@ -348,14 +372,15 @@ export default async function handler(req, res) {
         userQuestion.includes('systemPrompt')
       );
       if (answerText && userQuestion && !isSystemMsg) {
-        await logToSheet(sessionId, language, userQuestion, answerText);
+        await logToSheet(sessionId, language, userQuestion, answerText, { uid: body.uid, tokens });
       }
 
       return res.status(200).json({
         data: [{
           role: 'assistant',
           content: [{ type: 'text', text: { value: answerText || 'Sorry — I could not generate an answer. Please try again.' } }]
-        }]
+        }],
+        quota
       });
     }
 
