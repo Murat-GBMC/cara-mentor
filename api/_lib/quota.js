@@ -1,4 +1,4 @@
-// api/_lib/quota.js — CARA monthly fair-use limits (v11)
+// api/_lib/quota.js — CARA monthly fair-use limits (v11, v12: CoE plans from LearnWorlds tags)
 //
 // Storage: Upstash Redis over its REST API (plain fetch, no npm dependency).
 // Files under api/_lib are not exposed as routes by Vercel.
@@ -8,8 +8,13 @@
 //   • token budget    (CARA_LIMIT_<TIER>_TOKENS — real OpenAI usage, incl. file_search and PDF reading)
 //   • per-minute rate (CARA_RATE_PER_MINUTE)
 //   • optional global monthly token ceiling across all users (CARA_GLOBAL_MONTHLY_TOKENS)
-// Tiers: coe, pdu, default (no/unknown platform), anon (no user id in the iframe URL).
-// A limit of 0 means "no limit" for that dimension.
+// Tiers: coe (fair use), coe_high (high limit), pdu, default (no/unknown platform),
+// anon (no user id in the iframe URL). A limit of 0 means "no limit" for that dimension.
+//
+// v12 plans (CoE only): the plan is read from the user's LearnWorlds tags, never from the URL.
+// A tag listed in CARA_HIGH_TAGS → plan "yuksek" (coe_high limits); otherwise "adil".
+// If LearnWorlds cannot be reached or the tags cannot be read, the user gets "adil" (never blocked).
+// Caches: user existence 30 days (cara:lw:<uid>), plan CARA_PLAN_CACHE_HOURS (cara:plan:<uid>).
 //
 // Identity: the iframe URL carries ?uid=<LearnWorlds user id>. If LW_API_BASE, LW_CLIENT_ID and
 // LW_ACCESS_TOKEN are set, each new uid is checked against the LearnWorlds API once (cached),
@@ -32,9 +37,13 @@ function config() {
     ratePerMinute: envInt('CARA_RATE_PER_MINUTE', 8),
     warnPct: envInt('CARA_WARN_PCT', 80),
     globalTokens: envInt('CARA_GLOBAL_MONTHLY_TOKENS', 0),
+    highTags: String(process.env.CARA_HIGH_TAGS ?? 'cara-yuksek')
+      .split(',').map(t => t.trim().toLowerCase()).filter(Boolean),
+    planCacheSeconds: Math.max(1, envInt('CARA_PLAN_CACHE_HOURS', 24)) * 3600,
     tiers: {
-      coe:     { messages: envInt('CARA_LIMIT_COE_MESSAGES', 200),     tokens: envInt('CARA_LIMIT_COE_TOKENS', 3000000) },
-      pdu:     { messages: envInt('CARA_LIMIT_PDU_MESSAGES', 100),     tokens: envInt('CARA_LIMIT_PDU_TOKENS', 1500000) },
+      coe:      { messages: envInt('CARA_LIMIT_COE_MESSAGES', 150),      tokens: envInt('CARA_LIMIT_COE_TOKENS', 1000000) },
+      coe_high: { messages: envInt('CARA_LIMIT_COE_HIGH_MESSAGES', 400), tokens: envInt('CARA_LIMIT_COE_HIGH_TOKENS', 2500000) },
+      pdu:      { messages: envInt('CARA_LIMIT_PDU_MESSAGES', 100),      tokens: envInt('CARA_LIMIT_PDU_TOKENS', 1000000) },
       default: { messages: envInt('CARA_LIMIT_DEFAULT_MESSAGES', 100), tokens: envInt('CARA_LIMIT_DEFAULT_TOKENS', 1500000) },
       anon:    { messages: envInt('CARA_LIMIT_ANON_MESSAGES', 20),     tokens: envInt('CARA_LIMIT_ANON_TOKENS', 200000) }
     }
@@ -92,41 +101,77 @@ function keys(user, p) {
   };
 }
 
-// ── Optional LearnWorlds user verification ────────────────────────────────
-async function verifyLearnWorldsUser(uid) {
-  const base = process.env.LW_API_BASE;
-  const client = process.env.LW_CLIENT_ID;
-  const token = process.env.LW_ACCESS_TOKEN;
-  if (!base || !client || !token) return true; // verification not configured
+// ── LearnWorlds: user verification + plan (from tags) ─────────────────────
+const PLAN_FAIR = 'adil';
+const PLAN_HIGH = 'yuksek';
+const PLAN_FALLBACK_TTL = 15 * 60; // after a LearnWorlds error, retry the plan lookup in 15 min
 
-  const cacheKey = `cara:lw:${uid}`;
-  const [cached] = await redis([['GET', cacheKey]]);
-  if (cached === '1') return true;
-  if (cached === '0') return false;
+function lwConfigured() {
+  return !!(process.env.LW_API_BASE && process.env.LW_CLIENT_ID && process.env.LW_ACCESS_TOKEN);
+}
 
-  let ok;
+// Tags may come as ["a","b"], [{name:"a"}, ...] or "a,b" — accept all of these.
+export function extractTags(user) {
+  const src = user?.tags ?? user?.data?.tags ?? user?.user?.tags;
+  let list = [];
+  if (Array.isArray(src)) list = src;
+  else if (typeof src === 'string') list = src.split(',');
+  return list
+    .map(t => (typeof t === 'string' ? t : (t?.name ?? t?.title ?? t?.label ?? t?.tag ?? t?.value ?? '')))
+    .map(t => String(t).trim().toLowerCase())
+    .filter(Boolean);
+}
+
+/** Returns { exists, plan }. Never throws; on any doubt: exists=true, plan='adil'. */
+async function lookupLearnWorldsUser(cfg, uid) {
+  if (!lwConfigured()) return { exists: true, plan: PLAN_FAIR };
+
+  const existsKey = `cara:lw:${uid}`;
+  const planKey = `cara:plan:${uid}`;
+  const [cachedExists, cachedPlan] = await redis([['GET', existsKey], ['GET', planKey]]);
+  if (cachedExists === '0') return { exists: false, plan: PLAN_FAIR };
+  if (cachedExists === '1' && cachedPlan) return { exists: true, plan: cachedPlan };
+
+  let r, data;
   try {
-    const r = await fetch(`${base.replace(/\/$/, '')}/v2/users/${encodeURIComponent(uid)}`, {
-      headers: { 'Lw-Client': client, Authorization: `Bearer ${token}`, Accept: 'application/json' }
+    const base = process.env.LW_API_BASE.replace(/\/$/, '');
+    r = await fetch(`${base}/v2/users/${encodeURIComponent(uid)}`, {
+      headers: { 'Lw-Client': process.env.LW_CLIENT_ID, Authorization: `Bearer ${process.env.LW_ACCESS_TOKEN}`, Accept: 'application/json' }
     });
-    if (r.ok) ok = true;
-    else if (r.status === 404) ok = false;
-    else { console.error('LearnWorlds verify: HTTP', r.status, '— allowing'); return true; }
+    data = await r.json().catch(() => null);
   } catch (e) {
-    console.error('LearnWorlds verify error — allowing:', e.message);
-    return true;
+    console.error('LearnWorlds verify error — allowing, plan=adil:', e.message);
   }
-  await redis([['SET', cacheKey, ok ? '1' : '0', 'EX', ok ? 30 * 86400 : 3600]]);
-  return ok;
+
+  if (r && r.status === 404) {
+    await redis([['SET', existsKey, '0', 'EX', 3600]]);
+    return { exists: false, plan: PLAN_FAIR };
+  }
+  if (!r || !r.ok) {
+    if (r) console.error('LearnWorlds verify: HTTP', r.status, '— allowing, plan=adil');
+    await redis([['SET', planKey, PLAN_FAIR, 'EX', PLAN_FALLBACK_TTL]]);
+    return { exists: true, plan: PLAN_FAIR };
+  }
+
+  const tags = extractTags(data);
+  const plan = tags.some(t => cfg.highTags.includes(t)) ? PLAN_HIGH : PLAN_FAIR;
+  // Field names only (no values) so the tag field can be confirmed in the Vercel logs
+  console.log(`LearnWorlds plan: uid=${uid} plan=${plan} tags=${JSON.stringify(tags)} fields=${Object.keys(data || {}).join(',')}`);
+  await redis([
+    ['SET', existsKey, '1', 'EX', 30 * 86400],
+    ['SET', planKey, plan, 'EX', cfg.planCacheSeconds]
+  ]);
+  return { exists: true, plan };
 }
 
 // ── Public API ────────────────────────────────────────────────────────────
-function tierFor(cfg, user, platform) {
+function tierFor(cfg, user, platform, plan) {
   if (user.anon) return cfg.tiers.anon;
+  if (platform === 'coe' && plan === PLAN_HIGH) return cfg.tiers.coe_high;
   return cfg.tiers[platform] || cfg.tiers.default;
 }
 
-function buildStatus(cfg, tier, p, { blocked = false, reason = null, msgs = 0, toks = 0 } = {}) {
+function buildStatus(cfg, tier, p, { blocked = false, reason = null, msgs = 0, toks = 0, plan = PLAN_FAIR } = {}) {
   const pm = tier.messages ? msgs / tier.messages : 0;
   const pt = tier.tokens ? toks / tier.tokens : 0;
   const pct = Math.min(100, Math.round(Math.max(pm, pt) * 100));
@@ -138,7 +183,8 @@ function buildStatus(cfg, tier, p, { blocked = false, reason = null, msgs = 0, t
     messagesLimit: tier.messages,
     pct,
     warn: !blocked && cfg.warnPct > 0 && pct >= cfg.warnPct,
-    resetAt: p.resetAt
+    resetAt: p.resetAt,
+    plan            // for the log sheet only; the chat page does not show it
   };
 }
 
@@ -157,14 +203,20 @@ export async function checkQuota(req, body, platform, opts = {}) {
   }
 
   const user = resolveUser(req, body);
-  const tier = tierFor(cfg, user, platform);
   const p = period();
+  let tier = tierFor(cfg, user, platform, PLAN_FAIR);
 
   try {
     if (user.anon && cfg.requireUser) return buildStatus(cfg, tier, p, { blocked: true, reason: 'no_user' });
-    if (!user.anon && !(await verifyLearnWorldsUser(user.uid))) {
-      return buildStatus(cfg, tier, p, { blocked: true, reason: 'unverified' });
+
+    let plan = PLAN_FAIR;
+    if (!user.anon) {
+      const lw = await lookupLearnWorldsUser(cfg, user.uid);
+      if (!lw.exists) return buildStatus(cfg, tier, p, { blocked: true, reason: 'unverified' });
+      if (platform === 'coe') plan = lw.plan;   // plans apply to CoE only
+      tier = tierFor(cfg, user, platform, plan);
     }
+    const S = (extra) => buildStatus(cfg, tier, p, { plan, ...extra });
 
     const k = keys(user, p);
     const cmds = [['GET', k.msg], ['GET', k.tok], ['GET', k.glob]];
@@ -175,24 +227,24 @@ export async function checkQuota(req, body, platform, opts = {}) {
     const glob = parseInt(out[2] || '0', 10);
 
     if (opts.rate && cfg.ratePerMinute && out[3] > cfg.ratePerMinute) {
-      return buildStatus(cfg, tier, p, { blocked: true, reason: 'rate', msgs, toks });
+      return S({ blocked: true, reason: 'rate', msgs, toks });
     }
     if (cfg.globalTokens && glob >= cfg.globalTokens) {
       console.error(`Quota: GLOBAL monthly token ceiling reached (${glob}/${cfg.globalTokens})`);
-      return buildStatus(cfg, tier, p, { blocked: true, reason: 'global', msgs, toks });
+      return S({ blocked: true, reason: 'global', msgs, toks });
     }
-    if (tier.tokens && toks >= tier.tokens) return buildStatus(cfg, tier, p, { blocked: true, reason: 'tokens', msgs, toks });
-    if (tier.messages && msgs >= tier.messages) return buildStatus(cfg, tier, p, { blocked: true, reason: 'messages', msgs, toks });
+    if (tier.tokens && toks >= tier.tokens) return S({ blocked: true, reason: 'tokens', msgs, toks });
+    if (tier.messages && msgs >= tier.messages) return S({ blocked: true, reason: 'messages', msgs, toks });
 
     if (opts.countMessage) {
       const [n] = await redis([['INCR', k.msg], ['EXPIRE', k.msg, MONTH_TTL]]);
       if (tier.messages && n > tier.messages) {           // lost a race with a parallel request
         await redis([['DECR', k.msg]]);
-        return buildStatus(cfg, tier, p, { blocked: true, reason: 'messages', msgs: tier.messages, toks });
+        return S({ blocked: true, reason: 'messages', msgs: tier.messages, toks });
       }
       msgs = n;
     }
-    return buildStatus(cfg, tier, p, { msgs, toks });
+    return S({ msgs, toks });
   } catch (e) {
     console.error('Quota check failed — allowing request:', e.message);
     return { enabled: false, blocked: false, error: true };

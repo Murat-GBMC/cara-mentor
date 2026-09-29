@@ -18,6 +18,7 @@
 // v11: monthly fair-use limits per user (see api/_lib/quota.js and QUOTA_SETUP.md).
 //   The chat page sends uid (LearnWorlds user id, from ...vercel.app/?platform=coe&uid=...).
 //   Needs UPSTASH_REDIS_REST_URL + UPSTASH_REDIS_REST_TOKEN; without them CARA runs unlimited.
+// v12: two CoE plans (adil / yuksek) read from the user's LearnWorlds tags; plan logged in column K.
 
 import { CARA_INSTRUCTIONS } from './instructions.js';
 import { checkQuota, recordTokens } from './_lib/quota.js';
@@ -150,7 +151,8 @@ export default async function handler(req, res) {
             responseLength,            // Response Length (chars)
             platform || '',            // Platform (coe / pdu)
             extra.uid || '',           // User (LearnWorlds id)
-            extra.tokens || ''         // Tokens used by this answer
+            extra.tokens || '',        // Tokens used by this answer
+            extra.plan || ''           // Plan (adil / yuksek)
           ]] })
         }
       );
@@ -372,7 +374,7 @@ export default async function handler(req, res) {
         userQuestion.includes('systemPrompt')
       );
       if (answerText && userQuestion && !isSystemMsg) {
-        await logToSheet(sessionId, language, userQuestion, answerText, { uid: body.uid, tokens });
+        await logToSheet(sessionId, language, userQuestion, answerText, { uid: body.uid, tokens, plan: quota.plan || 'adil' });
       }
 
       return res.status(200).json({
