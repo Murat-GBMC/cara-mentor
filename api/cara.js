@@ -286,6 +286,11 @@ These are the ONLY courses currently available in PDU Circle:
       ? `\n\n## PLATFORM CONTEXT\n\nThe user is using: ${PLATFORM_NAMES[platform]}. Use this environment without asking.` +
         (platform === 'pdu' ? PDU_RULES : '')
       : '';
+    // PDU Circle rules are also sent as a developer message on every turn, so they
+    // win over a saved dashboard Prompt and over earlier answers in the same chat.
+    if (platform === 'pdu') {
+      reqBody.input = [{ role: 'developer', content: PDU_RULES.trim() }, ...reqBody.input];
+    }
     if (PROMPT_ID) {
       reqBody.prompt = { id: PROMPT_ID };
       if (platformContext) reqBody.instructions = platformContext.trim();
