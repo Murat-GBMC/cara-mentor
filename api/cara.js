@@ -6,6 +6,8 @@
 // Required Vercel environment variables:
 //   OPENAI_API_KEY      (existing)
 //   VECTOR_STORE_ID     (NEW — the vs_... ID of CARA's knowledge base)
+//   VECTOR_STORE_ID_PDU (optional — separate knowledge base for PDU Circle; falls back to VECTOR_STORE_ID)
+//   VECTOR_STORE_ID_COE (optional — separate knowledge base for the CoE; falls back to VECTOR_STORE_ID)
 //   GOOGLE_SHEET_ID, GOOGLE_CLIENT_EMAIL, GOOGLE_PRIVATE_KEY   (existing, for logging)
 // Optional:
 //   CARA_PROMPT_ID      (a pmpt_... ID if you saved CARA's instructions as a Prompt in the OpenAI dashboard)
@@ -298,9 +300,12 @@ These are the ONLY courses currently available in PDU Circle:
       reqBody.instructions = CARA_INSTRUCTIONS + platformContext;
     }
     // Same rule as v9: when the user attached a file, skip knowledge-base search
-    if (!hasFile && VECTOR_STORE_ID) {
-      reqBody.tools = [{ type: 'file_search', vector_store_ids: [VECTOR_STORE_ID] }];
-    } else if (!VECTOR_STORE_ID) {
+    // Each channel can have its own knowledge base (only content that is live there)
+    const STORE_BY_PLATFORM = { pdu: process.env.VECTOR_STORE_ID_PDU, coe: process.env.VECTOR_STORE_ID_COE };
+    const storeId = STORE_BY_PLATFORM[platform] || VECTOR_STORE_ID;
+    if (!hasFile && storeId) {
+      reqBody.tools = [{ type: 'file_search', vector_store_ids: [storeId] }];
+    } else if (!storeId) {
       console.error('VECTOR_STORE_ID is not set — CARA is answering without her knowledge base');
     }
     return reqBody;
