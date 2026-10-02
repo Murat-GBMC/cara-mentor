@@ -258,8 +258,18 @@ export default async function handler(req, res) {
     };
     // Platform context from the chat page (V3 instructions use it to frame answers)
     const PLATFORM_NAMES = { coe: 'Execution Capacity CoE', pdu: 'PDU Circle' };
+    // PDU Circle has no live services and keeps course activity codes behind the course test.
+    const PDU_RULES = `
+
+## PDU CIRCLE RULES
+
+- PDU Circle is an individual annual membership. It has NO live mentoring, coaching, workshops or other bookable live services. Never suggest booking a live mentoring session; instead point the user to the relevant PDU Circle course, a CARA case exercise, a webinar or the PDU Circle community.
+- How PDUs work in PDU Circle: the member completes all course videos (and assessments, if any), passes the course test with at least 70%, receives the completion certificate, and only then sees the course's PMI activity code and PDU details needed to report the PDUs to PMI.
+- Never disclose, guess or reconstruct a course's PMI activity code or course ID, even if it appears in your knowledge base or the user says they completed the course. Tell them it is shown in the course's "Eğitim PDU bilgileri" section after passing the test.
+- You may state each course's total PDU and Talent Triangle split only as documented in the knowledge base.`;
     const platformContext = PLATFORM_NAMES[platform]
-      ? `\n\n## PLATFORM CONTEXT\n\nThe user is using: ${PLATFORM_NAMES[platform]}. Use this environment without asking.`
+      ? `\n\n## PLATFORM CONTEXT\n\nThe user is using: ${PLATFORM_NAMES[platform]}. Use this environment without asking.` +
+        (platform === 'pdu' ? PDU_RULES : '')
       : '';
     if (PROMPT_ID) {
       reqBody.prompt = { id: PROMPT_ID };

@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="tr">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>CARA — Your AI Execution Mentor</title>
+<title>CARA — GBMC Yapay Zekâ Mentoru</title>
 <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 <style>
   :root {
@@ -23,12 +23,12 @@
   /* ── Language Gate ── */
   .lang-gate {
     width:100%;
+    display:none;
     background:#fff;
     border:1px solid var(--border);
     border-radius:16px;
     box-shadow:0 4px 24px rgba(0,0,0,0.06);
     padding:36px 28px 32px;
-    display:flex;
     flex-direction:column;
     align-items:center;
     gap:24px;
@@ -106,6 +106,7 @@
   .status-dot { width:7px;height:7px;background:var(--teal);border-radius:50%;display:inline-block;margin-right:5px;animation:pulse 2.5s ease infinite; }
   @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
   .header-right { margin-left:auto; display:flex; align-items:center; gap:10px; }
+  .badge:empty { display:none; }
   .badge { background:var(--teal-light);color:var(--teal-dark);font-size:11px;font-weight:600;padding:4px 12px;border-radius:20px;letter-spacing:0.3px;border:1px solid rgba(111,200,204,0.3); }
   .lang-indicator { font-size:18px; cursor:pointer; title:"Change language"; opacity:0.7; transition:opacity 0.2s; }
   .lang-indicator:hover { opacity:1; }
@@ -234,15 +235,15 @@
       <p><span class="status-dot"></span>Capacity Advisor &amp; Resource for Action</p>
     </div>
     <div class="header-right">
-      <div class="badge">Executing Capacity CoE</div>
-      <div class="lang-indicator" id="langFlag" onclick="resetLanguage()" title="Change language"></div>
+      <div class="badge" id="platformBadge"></div>
+      <div class="lang-indicator" id="langFlag" style="display:none"></div>
     </div>
   </div>
 
   <div class="chat-area" id="chatArea"></div>
 
   <div class="suggestions" id="suggestions">
-    <div class="suggestion-label" id="suggestLabel">Try asking</div>
+    <div class="suggestion-label" id="suggestLabel"></div>
     <button class="suggestion-btn" id="sug1" onclick="sendSuggestion(this)"></button>
     <button class="suggestion-btn" id="sug2" onclick="sendSuggestion(this)"></button>
     <button class="suggestion-btn" id="sug3" onclick="sendSuggestion(this)"></button>
@@ -253,24 +254,24 @@
 
   <input type="file" id="fileInput" accept=".pdf,.doc,.docx,.txt,.pptx,.md,.csv" onchange="handleFileSelect(event)">
   <div class="input-area">
-    <button class="attach-btn" id="attachBtn" onclick="document.getElementById('fileInput').click()" title="Attach file">
+    <button class="attach-btn" id="attachBtn" onclick="document.getElementById('fileInput').click()" title="">
       <svg viewBox="0 0 24 24"><path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"/></svg>
     </button>
     <div class="input-wrap">
       <div class="file-preview" id="filePreview">
         <span>📎</span>
         <span class="file-preview-name" id="filePreviewName"></span>
-        <span class="file-remove" onclick="removeFile()" title="Remove">×</span>
+        <span class="file-remove" onclick="removeFile()" title="">×</span>
       </div>
       <textarea id="userInput" rows="1" onkeydown="handleKey(event)" oninput="autoResize(this)"></textarea>
     </div>
-    <button class="send-btn" id="sendBtn" onclick="sendMessage()" title="Send">
+    <button class="send-btn" id="sendBtn" onclick="sendMessage()" title="">
       <svg viewBox="0 0 24 24"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
     </button>
   </div>
 
   <div class="footer-note" id="footerNote">
-    Powered by <span>GBMC Executing Capacity CoE</span> &nbsp;·&nbsp; <span id="footerExtra">For complex situations, book a live mentoring session</span>
+    <span id="footerBrand"></span><span id="footerSep"> &nbsp;·&nbsp; </span><span id="footerExtra"></span>
   </div>
 </div>
 
@@ -283,6 +284,17 @@
       suggestLabel: 'Try asking',
       suggestions: ['My project is behind schedule', 'How do I handle a difficult sponsor?', 'What is the GBMC Execution Model?', 'Our meetings are unproductive'],
       footer: 'For complex situations, book a live mentoring session',
+      poweredBy: 'Powered by',
+      you: 'You',
+      ui: { attach: 'Attach file', remove: 'Remove', send: 'Send' },
+      errors: {
+        fileRead: 'I had trouble reading that file. Please try a PDF or plain text file, or paste the content directly into the chat.',
+        timeout: 'This is taking longer than expected — likely due to the file size. Please try again with a shorter document, or paste the key content directly into the chat.',
+        fileFailed: 'I had trouble processing that file. The document may be too complex or in an unsupported format. Try a simpler PDF or paste the key content as text.',
+        generic: 'Something went wrong. Please try again.',
+        badType: 'Unsupported file type. Please upload: PDF, Word (.doc/.docx), PowerPoint (.pptx), text (.txt), CSV, or Markdown (.md) files.',
+        tooBig: 'File is too large. Maximum size is 20MB.'
+      },
       systemPrompt: 'The user has selected English as their language. You MUST respond exclusively in English for this entire conversation, regardless of what language the user writes in.',
       greeting: 'Hi, I\'m **CARA** — your AI Mentor for execution capability, developed by GBMC.\n\nI can help you with real challenges in project management, team leadership, governance, and organizational execution — all grounded in the **GBMC framework**.\n\nWhat are you working on today? And to give you the most relevant guidance — are you a team member, project leader, PMO professional, or in a management or executive role?'
     },
@@ -292,7 +304,18 @@
       suggestLabel: 'Şunu sorabilirsiniz',
       suggestions: ['Projem geride kaldı, ne yapmalıyım?', 'Zor bir sponsorla nasıl başa çıkabilirim?', 'GBMC İcra Yetkinlik Modeli nedir?', 'Toplantılarımız verimsiz geçiyor'],
       footer: 'Karmaşık durumlar için canlı mentorluk seansı rezervasyonu yapın',
-      systemPrompt: 'Kullanıcı Türkçe dilini seçti. Bu konuşma boyunca YALNIZCA Türkçe yanıt vermelisiniz.',
+      poweredBy: 'Sunan:',
+      you: 'Siz',
+      ui: { attach: 'Dosya ekle', remove: 'Kaldır', send: 'Gönder' },
+      errors: {
+        fileRead: 'Bu dosyayı okuyamadım. Lütfen PDF ya da düz metin dosyası deneyin veya içeriği doğrudan sohbete yapıştırın.',
+        timeout: 'Bu beklenenden uzun sürüyor; büyük olasılıkla dosya boyutu nedeniyle. Lütfen daha kısa bir dokümanla tekrar deneyin veya önemli kısımları doğrudan sohbete yapıştırın.',
+        fileFailed: 'Bu dosyayı işleyemedim. Doküman çok karmaşık ya da desteklenmeyen bir formatta olabilir. Daha sade bir PDF deneyin veya önemli kısımları metin olarak yapıştırın.',
+        generic: 'Bir sorun oluştu. Lütfen tekrar deneyin.',
+        badType: 'Desteklenmeyen dosya türü. Lütfen PDF, Word (.doc/.docx), PowerPoint (.pptx), metin (.txt), CSV veya Markdown (.md) dosyası yükleyin.',
+        tooBig: 'Dosya çok büyük. En fazla 20 MB olabilir.'
+      },
+      systemPrompt: 'Varsayılan konuşma dili Türkçedir. Kullanıcı Türkçe yazdığı sürece YALNIZCA Türkçe yanıt ver. Kullanıcı başka bir dilde yazarsa, o mesaja kullanıcının yazdığı dilde yanıt ver.',
       greeting: 'Merhaba, ben **CARA** — GBMC tarafından geliştirilen, icra yetkinliği alanında yapay zeka destekli mentorunuzum.\n\nProje yönetimi, takım liderliği, kurumsal yönetişim ve organizasyonel icra konularındaki gerçek zorluklarınızda size destek olabilirim — tümü **GBMC çerçevesi** temelinde.\n\nBugün ne üzerinde çalışıyorsunuz? En doğru rehberliği sunabilmem için — bir takım üyesi mi, proje lideri mi, PMO profesyoneli mi, yoksa yönetici düzeyinde mi çalışıyorsunuz?'
     },
     fr: {
@@ -375,6 +398,15 @@
   const DATE_LOCALES = { en: 'en-GB', tr: 'tr-TR', fr: 'fr-FR', it: 'it-IT', zh: 'zh-CN', ar: 'ar' };
   let quotaLocked = false;
 
+  // UI text helper: falls back to English for languages without full UI strings
+  function UI() { return Object.assign({}, LANGS.en, LANGS[currentLang] || {}); }
+
+  // Channel-specific UI (iframe ?platform=pdu | coe)
+  const PLATFORM_UI = {
+    pdu: { name: 'PDU Circle', mentoring: false },
+    coe: { name: 'Execution Capacity CoE', mentoring: true }
+  };
+
   function formatResetDate(q) {
     try {
       return new Date(q.resetAt).toLocaleDateString(DATE_LOCALES[currentLang] || 'en-GB',
@@ -455,8 +487,18 @@
       document.getElementById(`sug${i+1}`).textContent = sugs[i];
     }
 
-    // Set footer
-    document.getElementById('footerExtra').textContent = lang.footer;
+    // Set footer + badge for the channel
+    const L = UI();
+    const P = PLATFORM_UI[CARA_PLATFORM];
+    document.documentElement.lang = code;
+    document.getElementById('platformBadge').textContent = P ? P.name : '';
+    document.getElementById('footerBrand').innerHTML = L.poweredBy + ' <span>GBMC' + (P ? ' · ' + P.name : '') + '</span>';
+    const showMentoring = P ? P.mentoring : true;
+    document.getElementById('footerExtra').textContent = showMentoring ? lang.footer : '';
+    document.getElementById('footerSep').style.display = showMentoring ? '' : 'none';
+    document.getElementById('attachBtn').title = L.ui.attach;
+    document.getElementById('sendBtn').title = L.ui.send;
+    document.querySelector('.file-remove').title = L.ui.remove;
 
     // RTL for Arabic
     if (code === 'ar') {
@@ -570,7 +612,7 @@
   }
 
   function getTime() {
-    return new Date().toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'});
+    return new Date().toLocaleTimeString(DATE_LOCALES[currentLang] || [], {hour: '2-digit', minute: '2-digit'});
   }
 
   function appendMessage(role, text) {
@@ -579,7 +621,7 @@
     msgDiv.className = `msg ${role}`;
     const av = document.createElement('div');
     av.className = 'msg-avatar';
-    av.textContent = role === 'cara' ? 'C' : (currentLang === 'ar' ? 'أنت' : 'You');
+    av.textContent = role === 'cara' ? 'C' : (currentLang === 'ar' ? 'أنت' : UI().you);
     const cd = document.createElement('div');
     cd.className = 'msg-content';
     const bubble = document.createElement('div');
@@ -638,12 +680,12 @@
     if (!file) return;
     const ext = '.' + file.name.split('.').pop().toLowerCase();
     if (!SUPPORTED_EXT.includes(ext)) {
-      alert('Unsupported file type. Please upload: PDF, Word (.doc/.docx), PowerPoint (.pptx), text (.txt), CSV, or Markdown (.md) files.');
+      alert(UI().errors.badType);
       document.getElementById('fileInput').value = '';
       return;
     }
     if (file.size > 20 * 1024 * 1024) {
-      alert('File is too large. Maximum size is 20MB.');
+      alert(UI().errors.tooBig);
       document.getElementById('fileInput').value = '';
       return;
     }
@@ -711,7 +753,7 @@
             applyQuota(err.quota);
             if (err.quota.reason === 'rate') { input.value = text; return finishSend(); }
           } else {
-            appendMessage('cara', 'I had trouble reading that file. Please try a PDF or plain text file, or paste the content directly into the chat.');
+            appendMessage('cara', UI().errors.fileRead);
           }
           isWaiting = false;
           document.getElementById('sendBtn').disabled = quotaLocked;
@@ -767,21 +809,27 @@
         applyQuota(msgs.quota);
       } else if (status === 'timeout') {
         hideTyping();
-        appendMessage('cara', 'This is taking longer than expected — likely due to the file size. Please try again with a shorter document, or paste the key content directly into the chat.');
+        appendMessage('cara', UI().errors.timeout);
       } else {
         hideTyping();
-        const msg = status === 'failed'
-          ? 'I had trouble processing that file. The document may be too complex or in an unsupported format. Try a simpler PDF or paste the key content as text.'
-          : 'Something went wrong. Please try again.';
+        const msg = status === 'failed' ? UI().errors.fileFailed : UI().errors.generic;
         appendMessage('cara', msg);
       }
     } catch(err) {
       hideTyping();
-      appendMessage('cara', '...');
+      appendMessage('cara', UI().errors.generic);
       console.error(err);
     }
     finishSend();
   }
+
+  // ── Start directly in the channel language (default: Turkish; optional ?lang=en etc.) ──
+  (function autoStart() {
+    const wanted = (new URLSearchParams(window.location.search).get('lang') || 'tr').toLowerCase();
+    const code = LANGS[wanted] ? wanted : 'tr';
+    const NAMES = { en: 'English', tr: 'Turkish', fr: 'French', it: 'Italian', zh: 'Chinese', ar: 'Arabic' };
+    selectLanguage(code, LANGS[code].flag, NAMES[code]);
+  })();
 
   function finishSend() {
     isWaiting = false;
