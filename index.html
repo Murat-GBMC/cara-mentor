@@ -492,7 +492,7 @@
     const P = PLATFORM_UI[CARA_PLATFORM];
     document.documentElement.lang = code;
     document.getElementById('platformBadge').textContent = P ? P.name : '';
-    document.getElementById('footerBrand').innerHTML = L.poweredBy + ' <span>GBMC' + (P ? ' · ' + P.name : '') + '</span>';
+    document.getElementById('footerBrand').innerHTML = '<span>GBMC' + (P ? ' · ' + P.name : '') + '</span>';
     const showMentoring = P ? P.mentoring : false;
     document.getElementById('footerExtra').textContent = showMentoring ? lang.footer : '';
     document.getElementById('footerSep').style.display = showMentoring ? '' : 'none';
