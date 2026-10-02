@@ -296,13 +296,13 @@
         tooBig: 'File is too large. Maximum size is 20MB.'
       },
       systemPrompt: 'The user has selected English as their language. You MUST respond exclusively in English for this entire conversation, regardless of what language the user writes in.',
-      greeting: 'Hi, I\'m **CARA** — your AI Mentor for execution capability, developed by GBMC.\n\nI can help you with real challenges in project management, team leadership, governance, and organizational execution — all grounded in the **GBMC framework**.\n\nWhat are you working on today? And to give you the most relevant guidance — are you a team member, project leader, PMO professional, or in a management or executive role?'
+      greeting: 'Hi! I\'m CARA. How can I help you?'
     },
     tr: {
       flag: '🇹🇷',
-      placeholder: 'CARA\'ya proje, liderlik ve icra hakkında istediğinizi sorun...',
-      suggestLabel: 'Şunu sorabilirsiniz',
-      suggestions: ['Projem geride kaldı, ne yapmalıyım?', 'Zor bir sponsorla nasıl başa çıkabilirim?', 'GBMC İcra Yetkinlik Modeli nedir?', 'Toplantılarımız verimsiz geçiyor'],
+      placeholder: 'Dinliyorum...',
+      suggestLabel: 'Şu tip sorular sorabilirsiniz',
+      suggestions: ['Projemde hangi metotları kullanmam faydalı olur?', 'Zor bir sponsorla nasıl başa çıkabilirim?', 'GBMC\'nin İcra Yetkinlik Modeli nedir?', 'Toplantılarımızın verimini nasıl artırabilirim?'],
       footer: 'Karmaşık durumlar için canlı mentorluk seansı rezervasyonu yapın',
       poweredBy: 'Sunan:',
       you: 'Siz',
@@ -316,7 +316,7 @@
         tooBig: 'Dosya çok büyük. En fazla 20 MB olabilir.'
       },
       systemPrompt: 'Varsayılan konuşma dili Türkçedir. Kullanıcı Türkçe yazdığı sürece YALNIZCA Türkçe yanıt ver. Kullanıcı başka bir dilde yazarsa, o mesaja kullanıcının yazdığı dilde yanıt ver.',
-      greeting: 'Merhaba, ben **CARA** — GBMC tarafından geliştirilen, icra yetkinliği alanında yapay zeka destekli mentorunuzum.\n\nProje yönetimi, takım liderliği, kurumsal yönetişim ve organizasyonel icra konularındaki gerçek zorluklarınızda size destek olabilirim — tümü **GBMC çerçevesi** temelinde.\n\nBugün ne üzerinde çalışıyorsunuz? En doğru rehberliği sunabilmem için — bir takım üyesi mi, proje lideri mi, PMO profesyoneli mi, yoksa yönetici düzeyinde mi çalışıyorsunuz?'
+      greeting: 'Merhaba! Adım CARA. Size nasıl yardımcı olabilirim?'
     },
     fr: {
       flag: '🇫🇷',
@@ -445,6 +445,7 @@
   }
 
   let threadId = null;
+  let pendingLangInstruction = null;
   let isWaiting = false;
   let currentLang = null;
   const sessionId = 'sess_' + Math.random().toString(36).slice(2) + Date.now();
@@ -515,66 +516,11 @@
       if (thread.quota && thread.quota.blocked) { hideTyping(); applyQuota(thread.quota); return; }
       threadId = thread.id;
 
-      // Send silent language instruction + greeting request
-      const greet = await callBackend({
-        action: 'addMessage',
-        threadId,
-        greeting: true,
-        message: lang.systemPrompt + '\n\nPlease greet the user warmly in ' + name + ' and introduce yourself as CARA. Ask about their role (team member, project leader, PMO, or executive) and what they are working on. Keep it warm and concise.'
-      });
-      if (greet.status === 'limit_reached') {
-        hideTyping();
-        if (greet.quota && greet.quota.reason === 'rate') appendMessage('cara', lang.greeting);
-        else applyQuota(greet.quota);
-        return;
-      }
-
-      const run = await callBackend({action: 'runAssistant', threadId, hasFile: false});
-      let status = run.status, runId = run.id;
-
-      let pollCount = 0;
-      const maxPolls = 90;
-      const startTime = Date.now();
-      while ((status === 'queued' || status === 'in_progress') && pollCount < maxPolls) {
-        await new Promise(r => setTimeout(r, 2000));
-        try {
-          const poll = await callBackend({action: 'getRunStatus', threadId, runId});
-          status = poll.status;
-          const elapsed = Math.round((Date.now() - startTime) / 1000);
-          console.log(`Poll ${pollCount+1} | status: ${status} | ${elapsed}s elapsed`);
-          const typingEl = document.getElementById('typingIndicator');
-          if (typingEl && elapsed > 5) {
-            const bubble = typingEl.querySelector('.typing-bubble');
-            if (bubble) {
-              let timeSpan = bubble.querySelector('.elapsed');
-              if (!timeSpan) {
-                timeSpan = document.createElement('span');
-                timeSpan.className = 'elapsed';
-                timeSpan.style.cssText = 'font-size:11px;color:#94a3b8;margin-left:8px;';
-                bubble.appendChild(timeSpan);
-              }
-              timeSpan.textContent = elapsed + 's...';
-            }
-          }
-        } catch(e) {
-          console.warn('Poll error:', e.message);
-        }
-        pollCount++;
-        if (['failed','cancelled','expired','requires_action'].includes(status)) break;
-      }
-      if (pollCount >= maxPolls) status = 'timeout';
-
+      // Fixed, short greeting (no model call). The language instruction is sent
+      // silently with the user's first message instead.
+      pendingLangInstruction = lang.systemPrompt;
       hideTyping();
-
-      if (status === 'completed') {
-        // ── PATCHED: pass empty question (greeting is a system message, not logged) ──
-        const msgs = await callBackend({action: 'getMessages', threadId, question: '', sessionId, language: currentLang});
-        const reply = msgs.data[0].content[0].text.value;
-        appendMessage('cara', reply);
-        applyQuota(msgs.quota);
-      } else {
-        appendMessage('cara', lang.greeting);
-      }
+      appendMessage('cara', lang.greeting);
     } catch(err) {
       hideTyping();
       appendMessage('cara', lang.greeting);
@@ -760,6 +706,10 @@
           removeFile();
           return;
         }
+      }
+      if (pendingLangInstruction) {
+        finalMessage = '[' + pendingLangInstruction + ']\n\n' + finalMessage;
+        pendingLangInstruction = null;
       }
       const added = await callBackend({action: 'addMessage', threadId, message: finalMessage, sessionId, language: currentLang});
       if (added.status === 'limit_reached') {
