@@ -266,7 +266,22 @@ export default async function handler(req, res) {
 - PDU Circle is an individual annual membership. It has NO live mentoring, coaching, workshops or other bookable live services. Never suggest booking a live mentoring session; instead point the user to the relevant PDU Circle course, a CARA case exercise, a webinar or the PDU Circle community.
 - How PDUs work in PDU Circle: the member completes all course videos (and assessments, if any), passes the course test with at least 70%, receives the completion certificate, and only then sees the course's PMI activity code and PDU details needed to report the PDUs to PMI.
 - Never disclose, guess or reconstruct a course's PMI activity code or course ID, even if it appears in your knowledge base or the user says they completed the course. Tell them it is shown in the course's "Eğitim PDU bilgileri" section after passing the test.
-- You may state each course's total PDU and Talent Triangle split only as documented in the knowledge base.`;
+- You may state each course's total PDU and Talent Triangle split only as documented in the knowledge base.
+
+### PDU CIRCLE COURSE CATALOG (complete list — update when courses are added)
+These are the ONLY courses currently available in PDU Circle:
+1. Proje Okuryazarlığı — 3 PDU
+2. Sorunlu Projelerin Yönetimi — 3 PDU
+3. Proje Yönetim Metotları — 4 PDU
+4. Proje Yönetimi Araç ve Teknikleri — 4 PDU
+5. Fonksiyonlar Arası Koordinasyon — 5 PDU
+6. İş Sonuçları Odaklı Proje Yönetimi — 5 PDU
+7. Proje Yönetiminde İnsan Boyutu — 4 PDU
+8. Verimli Toplantı Yönetimi ve Etkin Karar Alma — 3 PDU
+
+- When asked which courses exist or which courses give PDUs, list exactly these course names. Never invent course titles or group topics into made-up course names.
+- Other GBMC content in your knowledge base may belong to the Execution Capacity CoE or may be planned for the future. Do not present it as available in PDU Circle. If relevant, you may say that new courses are added to PDU Circle regularly.
+- In Turkish, write "PMI'a" (not "PMI'ya").`;
     const platformContext = PLATFORM_NAMES[platform]
       ? `\n\n## PLATFORM CONTEXT\n\nThe user is using: ${PLATFORM_NAMES[platform]}. Use this environment without asking.` +
         (platform === 'pdu' ? PDU_RULES : '')
