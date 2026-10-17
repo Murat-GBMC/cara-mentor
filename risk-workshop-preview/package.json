@@ -1,0 +1,1 @@
+{"name": "cara-risk-workshop-preview", "private": true, "type": "module", "scripts": {"build": "node build.mjs"}, "engines": {"node": "24.x"}}
