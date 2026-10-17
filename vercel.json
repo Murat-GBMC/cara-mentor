@@ -2,6 +2,12 @@
   "functions": {
     "api/cara.js": {
       "maxDuration": 60
+    },
+    "api/risk-review.js": {
+      "maxDuration": 90
+    },
+    "api/risk-lti-launch.js": {
+      "maxDuration": 30
     }
   }
 }
