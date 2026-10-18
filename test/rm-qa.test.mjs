@@ -1,0 +1,20 @@
+import test from 'node:test';import assert from 'node:assert/strict';import vm from 'node:vm';
+import template from '../api/_lib/rm-template.js';
+import {priorityFingerprint,plainFeedback} from '../api/_lib/rm-evaluation.js';
+import {digest} from '../api/_lib/rm-auth.js';
+const script=template.match(/<script>([\s\S]*?)<\/script>/)[1];
+function fn(name){const start=script.indexOf('function '+name+'('),end=script.indexOf('\nfunction ',start+1);return script.slice(start,end<0?undefined:end)}
+test('sentence construction normalizes punctuation and opportunities use a condition',()=>{const context=vm.createContext({});vm.runInContext(fn('fragment')+'\n'+fn('sentence'),context);const make=r=>vm.runInContext('sentence('+JSON.stringify(r)+')',context);const threat=make({cause:'Gecikme nedeniyle,.',event:'Başlangıç sarkabilir..',effect:'Bütçe aşılabilir.'});assert.equal(threat,'Gecikme nedeniyle, Başlangıç sarkabilir. Bu da Bütçe aşılabilir.');const opp=make({type:'Fırsat',cause:'Fırsat yakalanırsa,',event:'Hizmet büyüyebilir.',effect:'Ciro artışı sağlar!'});assert.equal(opp,'Fırsat yakalanırsa, Hizmet büyüyebilir. Bu da Ciro artışı sağlar.');assert(!opp.includes('nedeniyle'))});
+test('markdown is removed without interpreting HTML',()=>assert.equal(plainFeedback('**Yetkin** <img src=x>'),'Yetkin <img src=x>'));
+const risks=Array.from({length:8},(_,i)=>({id:'TEST'+i,type:i===7?'Fırsat':'Tehdit',category:['İnsan','Teknik','Tedarikçi','Paydaş ve organizasyon','Dış etkenler'][i%5],cause:'Belgeye dayalı koşul',event:'Belirsiz olay olabilir',effect:'Hedef etkilenebilir',o:'3',e:'4',top:i<5,reason:'Belgeye dayalı öncelik',summary:'Kısa özet'}));
+const submission={risks,urgent:'İlk iş',earliest:'En erken olay'};
+test('example fingerprint ignores sponsor wording but detects changed scores',()=>{const base=priorityFingerprint(submission),copy=structuredClone(submission);copy.risks[0].summary='Başka kısa özet';assert.equal(priorityFingerprint(copy),base);copy.risks[0].e='5';assert.notEqual(priorityFingerprint(copy),base)});
+test('category question is mandatory and example only follows successful A5 review',async()=>{
+ process.env.RM1_CASE_JSON=JSON.stringify({documents:[]});process.env.RM1_GUIDE_JSON=JSON.stringify({A4:'Eski referans',A5:'Örnek ilk 5 (sadece A5 tamamlandıktan sonra, istek üzerine):\n'+[1,2,3,4,5].map(i=>i+'. Sentetik örnek '+i).join('\n')+'\n### Bitiş'});process.env.OPENAI_API_KEY='test';process.env.KV_REST_API_URL='https://kv.example';process.env.KV_REST_API_TOKEN='test';
+ const token='x'.repeat(43),store=new Map([['cara:rm1:lti:session:'+digest(token),JSON.stringify({subject:'test',caseId:'RM-1',expiresAt:Date.now()+7200000})]]);const original=global.fetch;let system='';global.fetch=async(url,opts)=>{const b=JSON.parse(opts.body);if(String(url).includes('kv.example')){let result=null;if(b[0]==='GET')result=store.get(b[1])||null;if(b[0]==='SET'){store.set(b[1],b[2]);result='OK'}if(b[0]==='EVAL')result=1;return Response.json({result})}system=b.input[0].content;return Response.json({output_text:JSON.stringify({feedback:'**Yetkin**: Gerekçeli alternatifleriniz var.'})})};
+ const review=(await import('../api/risk-review.js')).default,example=(await import('../api/risk-example.js')).default;
+ const invoke=async(handler,body)=>{const res={setHeader(){},end(v){this.body=JSON.parse(v)}};await handler({method:'POST',headers:{authorization:'Bearer '+token},body},res);return res};
+ try{assert.equal((await invoke(example,{submission})).statusCode,403);let r=await invoke(review,{caseId:'RM-1',stage:'A4',submission:{risks}});assert.equal(r.statusCode,200);assert(!r.body.feedback.includes('**'));assert(r.body.feedback.includes('Takvim ve bütçe'));assert(system.includes('Tüm 15 referans riski yazılmadı diye Başlangıç deme'));
+ r=await invoke(review,{caseId:'RM-1',stage:'A5',submission});assert.equal(r.statusCode,200);r=await invoke(example,{submission});assert.equal(r.statusCode,200);assert.equal(r.body.items.length,5);const changed=structuredClone(submission);changed.risks[0].e='5';assert.equal((await invoke(example,{submission:changed})).statusCode,403);
+ }finally{global.fetch=original}
+});

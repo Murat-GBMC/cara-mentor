@@ -36,3 +36,15 @@ Display data is not sent to the model; participant-written answers may contain n
 
 Tests: node --test test/rm-auth.test.mjs. Synthetic issuer keys only. Live school
 handshake needs the actual school-generated registration data. No LTI certification claimed.
+
+## 18 Ekim 2026 — katılımcı testi düzeltmeleri
+
+- Değişiklik sınırı: yalnızca rm-* / risk-* dosyaları ve bu belge. Her yayından önce `git diff --stat` ve korunan dosyaların blob SHA karşılaştırması yapılır. Ana CARA ayarları değiştirilmez.
+- Akış: aynı commit önce önizlemede denenir, ardından production main'e taşınır; ana CARA kısa sohbetle doğrulanır. Ayrı Vercel projesine taşıma sonraki iş olarak değerlendirilir.
+- Hitap: arayüz ve CARA'da siz. Belgelerde kişisel isimler korunur. CARA geri bildiriminde isim kullanılmaz.
+- Kapsam: referans havuzu eksiksiz liste şartı değildir. 8+ risk / 5+ kategori / bir fırsat kategori kapsamı için Yetkin; 8+ / 3–4 kategori / fırsat Gelişen; 8'den az veya 1–2 kategori Başlangıç. Dayanak ve yazım ayrı değerlendirilir. Boş kategoriler gelişim sorusuyla hatırlatılır; zorunlu doldurma şartı değildir.
+- Eski geri bildirim taslakta etiketle korunur, geçiş ve rapor için geçerli sayılmaz. Model çağrısına eski değerlendirme eklenmez.
+- Örnek ilk beş: A5 incelemesi başarıyla bittikten sonra, aynı oturumda ve aynı risk/puan/öncelik cevapları için açılır. Sunucu özeti RM1_GUIDE_JSON içinden çıkarır. Yeni anahtar ortam değişkeni gerekmez. Yeni LTI oturumunda örneği açmak için A5 değerlendirmesini yenilemek gerekir.
+- Sponsor özetleri: canlı 25 kelime sayacı, kullanıcı tarafından seçilip düzenlenebilen risk cümlesi taslağı.
+- Rapor: açılır pencere, aynı sayfada yazdırılabilir görünüm ve UTF-8 HTML indirme. HTML dosyası başka tarayıcıda açılıp PDF olarak kaydedilebilir. Kişisel notlar rapora girmez.
+- Safari/iPad: gerçek Safari ve fiziksel iPad testi ayrıca yapılmalıdır; Chromium mobil görünümü bunun yerine geçmez.
