@@ -17,6 +17,7 @@ export default async function handler(req,res){
   const messageScript=`<script>window.addEventListener('message',e=>{if(e.origin!=='https://gbmc-tr.learnworlds.com'||e.source!==window.parent||e.data?.type!=='cara-participant')return;window.CARA_PARTICIPANT={certificationName:e.data.certificationName,firstName:e.data.firstName};refreshParticipant()});window.parent.postMessage({type:'cara-ready'},'https://gbmc-tr.learnworlds.com');</script>`;
   let output=template.replace('__CONTENT__',()=>js(content)).replace('__AUTH__',()=>js({token,uid,name}));
   output=output.replace('LearnWorlds oturumu gerekli.','Etkinliği yeniden açın.').replaceAll('Dersinize dönüp etkinliği yeniden açın.','Etkinliği yeniden açın.');
-  return html(res,200,output.replace('</html>',messageScript+'</html>'));
+  const end=output.lastIndexOf('</html>');
+  return html(res,200,output.slice(0,end)+messageScript+output.slice(end));
  }catch(e){console.error('rm1 embed',{type:e.message});return html(res,503,'<p>Atölye şu an açılamadı. Biraz sonra tekrar deneyin.</p>')}
 }
