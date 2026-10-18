@@ -1,6 +1,6 @@
 import test from 'node:test';import assert from 'node:assert/strict';
 import {generateKeyPair,SignJWT,exportJWK,createLocalJWKSet} from 'jose';
-import {CLAIM,APP,verifyLaunch,takeState,digest,cookieName,session,displayName,publicJwks} from '../api/_lib/rm-auth.js';
+import {CLAIM,APP,LAUNCH,verifyLaunch,takeState,digest,cookieName,session,displayName,publicJwks} from '../api/_lib/rm-auth.js';
 const {privateKey,publicKey}=await generateKeyPair('RS256',{extractable:true});const jwk=await exportJWK(publicKey);jwk.kid='platform-test';const resolver=createLocalJWKSet({keys:[jwk]});
 const p={issuer:'https://school.learnworlds.com',clientId:'registered-client',deploymentId:'registered-deploy'};const nonce='expected-nonce';
 const now=Math.floor(Date.now()/1000);
@@ -26,3 +26,6 @@ globalThis.fetch=async(url,opts)=>{const a=JSON.parse(opts.body);let result=null
 test('browser bound state consumed once; no cookie rejected',async()=>{const state='a'.repeat(43),binding='browser-random';store.set('cara:rm1:lti:state:'+digest(state),JSON.stringify({nonce,binding:digest(binding)}));await assert.rejects(()=>takeState({headers:{}},state));const req={headers:{cookie:cookieName(state)+'='+binding}};assert.equal((await takeState(req,state)).nonce,nonce);await assert.rejects(()=>takeState(req,state))});
 test('session requires opaque server token; cannot impersonate uid',async()=>{await assert.rejects(()=>session({headers:{},body:{uid:'learner-1'}}));await assert.rejects(()=>session({headers:{authorization:'Bearer '+ 'a'.repeat(43)}}));const token='b'.repeat(43);store.set('cara:rm1:lti:session:'+digest(token),JSON.stringify({subject:'verified-subject-hash',caseId:'RM-1',expiresAt:Date.now()+1000}));assert.equal((await session({headers:{authorization:'Bearer '+token}})).subject,'verified-subject-hash')});
 test('JWKS never reveals private parameters',async()=>{const priv=await exportJWK(privateKey);priv.kid='tool-test';process.env.RM1_TOOL_PRIVATE_JWK=JSON.stringify(priv);const keys=publicJwks();assert.equal(keys.keys[0].kid,'tool-test');for(const k of ['d','p','q','dp','dq','qi'])assert.equal(keys.keys[0][k],undefined)});
+
+test('accept signed LearnWorlds Launch URL target',async()=>assert.equal((await verifyLaunch(await signed({[CLAIM+'target_link_uri']:LAUNCH}),p,{nonce},resolver)).sub,'learner-1'));
+test('target allowlist rejects suffixes, query strings and missing target',async()=>{for(const target of [APP+'/',LAUNCH+'?x=1',LAUNCH+'/extra',null])await denied({[CLAIM+'target_link_uri']:target})});
