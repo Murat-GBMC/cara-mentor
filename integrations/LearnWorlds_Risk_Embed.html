@@ -1,0 +1,16 @@
+<iframe id="cara-risk-frame" title="CARA Risk Atölyesi" src="https://cara-mentor.vercel.app/api/risk-embed?uid={{USER_ID}}&amp;name={{USER_NAME}}" style="width:100%;height:1100px;border:0;" allow="clipboard-write"></iframe>
+<script>
+(function(){
+ const frame=document.getElementById('cara-risk-frame');
+ function value(v){return typeof v==='string'?v:(v&&typeof v.value==='string'?v.value:'');}
+ function send(){
+  let u;try{u=window.LW?.user||window.parent.LW?.user;}catch(e){}
+  if(!u)return;
+  const full=value(u.cf_certification_name)||value(u.custom_fields?.cf_certification_name)||value(u.fields?.cf_certification_name);
+  const first=value(u.first_name)||value(u.firstName)||full.split(' ')[0];
+  if(full||first)frame.contentWindow.postMessage({type:'cara-participant',certificationName:full,firstName:first},'https://cara-mentor.vercel.app');
+ }
+ window.addEventListener('message',function(e){if(e.origin==='https://cara-mentor.vercel.app'&&e.source===frame.contentWindow&&e.data?.type==='cara-ready')send();});
+ frame.addEventListener('load',send);let n=0;const timer=setInterval(function(){send();if(++n>=30)clearInterval(timer);},500);
+})();
+</script>
